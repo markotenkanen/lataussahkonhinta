@@ -11,67 +11,69 @@ interface CurrentPriceProps {
   data: PriceData[]
   currentTime: Date
   resolution: Resolution
+  timezone: string
+  unitLabel: string
 }
 
-export function CurrentPrice({ data, currentTime, resolution }: CurrentPriceProps) {
+export function CurrentPrice({ data, currentTime, resolution, timezone, unitLabel }: CurrentPriceProps) {
   const { t, language } = useTranslation()
 
   console.log("[v0] CurrentPrice - Current language:", language)
   console.log("[v0] CurrentPrice - Translated 'currentPrice':", t("currentPrice"))
 
   const { currentPrice, previousPrice } = useMemo(() => {
-    const finnishTime = getDateInTimezone(currentTime, "Europe/Helsinki")
+    const localTime = getDateInTimezone(currentTime, timezone)
 
     let current: PriceData | undefined
     let previous: PriceData | undefined
 
     if (resolution === "15min") {
-      const currentMinutes = Math.floor(finnishTime.minute / 15) * 15
+      const currentMinutes = Math.floor(localTime.minute / 15) * 15
 
       current = data.find((item) => {
-        const itemTime = getDateInTimezone(new Date(item.timestamp), "Europe/Helsinki")
+        const itemTime = getDateInTimezone(new Date(item.timestamp), timezone)
         return (
-          itemTime.year === finnishTime.year &&
-          itemTime.month === finnishTime.month &&
-          itemTime.day === finnishTime.day &&
-          itemTime.hour === finnishTime.hour &&
+          itemTime.year === localTime.year &&
+          itemTime.month === localTime.month &&
+          itemTime.day === localTime.day &&
+          itemTime.hour === localTime.hour &&
           itemTime.minute === currentMinutes
         )
       })
 
       const prevMinutes = currentMinutes - 15 < 0 ? 45 : currentMinutes - 15
-      const prevHour = currentMinutes - 15 < 0 ? (finnishTime.hour === 0 ? 23 : finnishTime.hour - 1) : finnishTime.hour
+      const prevHour = currentMinutes - 15 < 0 ? (localTime.hour === 0 ? 23 : localTime.hour - 1) : localTime.hour
 
       previous = data.find((item) => {
-        const itemTime = getDateInTimezone(new Date(item.timestamp), "Europe/Helsinki")
+        const itemTime = getDateInTimezone(new Date(item.timestamp), timezone)
         return (
-          itemTime.year === finnishTime.year &&
-          itemTime.month === finnishTime.month &&
-          itemTime.day === finnishTime.day &&
+          itemTime.year === localTime.year &&
+          itemTime.month === localTime.month &&
+          itemTime.day === localTime.day &&
           itemTime.hour === prevHour &&
           itemTime.minute === prevMinutes
         )
       })
     } else {
-      const currentHour = finnishTime.hour
+      const currentHour = localTime.hour
       const previousHour = currentHour === 0 ? 23 : currentHour - 1
 
       current = data.find((item) => {
-        const itemTime = getDateInTimezone(new Date(item.timestamp), "Europe/Helsinki")
+        const itemTime = getDateInTimezone(new Date(item.timestamp), timezone)
         return (
-          itemTime.year === finnishTime.year &&
-          itemTime.month === finnishTime.month &&
-          itemTime.day === finnishTime.day &&
+          itemTime.year === localTime.year &&
+          itemTime.month === localTime.month &&
+          itemTime.day === localTime.day &&
           itemTime.hour === currentHour
         )
       })
 
       previous = data.find((item) => {
-        const itemTime = getDateInTimezone(new Date(item.timestamp), "Europe/Helsinki")
-        const prevDay = currentHour === 0 ? finnishTime.day - 1 : finnishTime.day
+        const itemTime = getDateInTimezone(new Date(item.timestamp), timezone)
+        const prevDay = currentHour === 0 ? localTime.day - 1 : localTime.day
         return (
-          itemTime.year === finnishTime.year &&
-          itemTime.month === finnishTime.month &&
+          itemTime.year === localTime.year &&
+          itemTime.month === localTime.month &&
           itemTime.day === prevDay &&
           itemTime.hour === previousHour
         )
@@ -79,7 +81,7 @@ export function CurrentPrice({ data, currentTime, resolution }: CurrentPriceProp
     }
 
     return { currentPrice: current, previousPrice: previous }
-  }, [data, currentTime, resolution])
+  }, [data, currentTime, resolution, timezone])
 
   const price = currentPrice?.price ?? 0
   const prevPrice = previousPrice?.price ?? price
@@ -95,7 +97,7 @@ export function CurrentPrice({ data, currentTime, resolution }: CurrentPriceProp
         <div>
           <p className="text-sm text-muted-foreground">{t("currentPrice")}</p>
           <p className="mt-2 font-mono text-3xl font-bold">{price.toFixed(2)}</p>
-          <p className="text-sm text-muted-foreground">c/kWh</p>
+          <p className="text-sm text-muted-foreground">{unitLabel}</p>
         </div>
         <div className={`flex items-center gap-1 ${trendColor}`}>
           <TrendIcon className="h-5 w-5" />

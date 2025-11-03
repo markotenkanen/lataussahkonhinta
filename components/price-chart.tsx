@@ -20,6 +20,8 @@ interface PriceChartProps {
   currentTime: Date
   resolution: Resolution
   chargingWindow?: { startIndex: number; endIndex: number } | null
+  timezone: string
+  unitLabel: string
 }
 
 function getPriceColor(price: number): string {
@@ -34,7 +36,7 @@ function getPriceColor(price: number): string {
   }
 }
 
-export function PriceChart({ data, currentTime, resolution, chargingWindow }: PriceChartProps) {
+export function PriceChart({ data, currentTime, resolution, chargingWindow, timezone, unitLabel }: PriceChartProps) {
   const { chartData, avgPrice, currentTimeIndex } = useMemo(() => {
     const prices = data.map((item) => item.price)
     const avg = prices.reduce((sum, price) => sum + price, 0) / prices.length
@@ -46,12 +48,12 @@ export function PriceChart({ data, currentTime, resolution, chargingWindow }: Pr
         time: itemDate.toLocaleTimeString("fi-FI", {
           hour: "2-digit",
           minute: "2-digit",
-          timeZone: "Europe/Helsinki",
+          timeZone: timezone,
         }),
         date: itemDate.toLocaleDateString("fi-FI", {
           day: "numeric",
           month: "short",
-          timeZone: "Europe/Helsinki",
+          timeZone: timezone,
         }),
         price: item.price,
         timestamp: item.timestamp,
@@ -59,14 +61,14 @@ export function PriceChart({ data, currentTime, resolution, chargingWindow }: Pr
       }
     })
 
-    const finnishCurrentTime = getDateInTimezone(currentTime, "Europe/Helsinki")
-    const currentHour = finnishCurrentTime.hour
-    const currentMinute = finnishCurrentTime.minute
-    const currentDay = finnishCurrentTime.day
+    const localCurrentTime = getDateInTimezone(currentTime, timezone)
+    const currentHour = localCurrentTime.hour
+    const currentMinute = localCurrentTime.minute
+    const currentDay = localCurrentTime.day
 
-    console.log("[v0] Chart - Current time (Finnish):", {
-      year: finnishCurrentTime.year,
-      month: finnishCurrentTime.month,
+    console.log("[v0] Chart - Current time (local tz):", {
+      year: localCurrentTime.year,
+      month: localCurrentTime.month,
       day: currentDay,
       hour: currentHour,
       minute: currentMinute,
@@ -78,7 +80,7 @@ export function PriceChart({ data, currentTime, resolution, chargingWindow }: Pr
       console.log("[v0] Chart - Looking for 15min slot:", { hour: currentHour, minute: roundedMinute, day: currentDay })
 
       currentIdx = formatted.findIndex((item) => {
-        const itemDate = getDateInTimezone(new Date(item.timestamp), "Europe/Helsinki")
+        const itemDate = getDateInTimezone(new Date(item.timestamp), timezone)
         const matches =
           itemDate.hour === currentHour && itemDate.minute === roundedMinute && itemDate.day === currentDay
         if (itemDate.hour === currentHour && itemDate.minute === roundedMinute) {
@@ -97,7 +99,7 @@ export function PriceChart({ data, currentTime, resolution, chargingWindow }: Pr
       console.log("[v0] Chart - Looking for hourly slot:", { hour: currentHour, day: currentDay })
 
       currentIdx = formatted.findIndex((item) => {
-        const itemDate = getDateInTimezone(new Date(item.timestamp), "Europe/Helsinki")
+        const itemDate = getDateInTimezone(new Date(item.timestamp), timezone)
         const matches = itemDate.hour === currentHour && itemDate.day === currentDay
         if (itemDate.hour === currentHour) {
           console.log(
@@ -116,7 +118,7 @@ export function PriceChart({ data, currentTime, resolution, chargingWindow }: Pr
     console.log("[v0] Chart - Current time index:", currentIdx)
 
     return { chartData: formatted, avgPrice: avg, currentTimeIndex: currentIdx }
-  }, [data, currentTime, resolution])
+  }, [data, currentTime, resolution, timezone])
 
   const CustomTooltip = useMemo(
     () =>
@@ -130,14 +132,14 @@ export function PriceChart({ data, currentTime, resolution, chargingWindow }: Pr
               <p className="text-xs text-muted-foreground">{payload[0].payload.date}</p>
               <p className="text-sm font-medium">{payload[0].payload.time}</p>
               <p className="text-lg font-bold" style={{ color }}>
-                {price.toFixed(2)} c/kWh
+                {price.toFixed(2)} {unitLabel}
               </p>
             </div>
           )
         }
         return null
       },
-    [],
+    [unitLabel],
   )
 
   const tickInterval = useMemo(() => {
@@ -192,14 +194,14 @@ export function PriceChart({ data, currentTime, resolution, chargingWindow }: Pr
           fontSize={12}
           tickLine={false}
           interval={tickInterval}
-          tickFormatter={(index) => chartData[index]?.time || ""}
+          tickFormatter={(index: number) => chartData[index]?.time || ""}
         />
         <YAxis
           stroke="hsl(var(--muted-foreground))"
           fontSize={12}
           tickLine={false}
           label={{
-            value: "c/kWh",
+            value: unitLabel,
             angle: -90,
             position: "insideLeft",
             style: { fill: "hsl(var(--muted-foreground))" },

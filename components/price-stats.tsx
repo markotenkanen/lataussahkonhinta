@@ -11,9 +11,11 @@ interface PriceStatsProps {
   tomorrowData: PriceData[]
   resolution: Resolution
   currentTime: Date
+  timezone: string
+  unitLabel: string
 }
 
-export function PriceStats({ todayData, tomorrowData, resolution, currentTime }: PriceStatsProps) {
+export function PriceStats({ todayData, tomorrowData, resolution, currentTime, timezone, unitLabel }: PriceStatsProps) {
   const { t, language } = useTranslation()
 
   console.log("[v0] PriceStats - Current language:", language)
@@ -35,7 +37,7 @@ export function PriceStats({ todayData, tomorrowData, resolution, currentTime }:
     const formatTime = (timestamp: string) => {
       const date = new Date(timestamp)
       return date.toLocaleTimeString(locale, {
-        timeZone: "Europe/Helsinki",
+        timeZone: timezone,
         hour: "2-digit",
         minute: "2-digit",
         hour12: false,
@@ -65,7 +67,7 @@ export function PriceStats({ todayData, tomorrowData, resolution, currentTime }:
     const formatTime = (timestamp: string) => {
       const date = new Date(timestamp)
       return date.toLocaleTimeString(locale, {
-        timeZone: "Europe/Helsinki",
+        timeZone: timezone,
         hour: "2-digit",
         minute: "2-digit",
         hour12: false,
@@ -140,7 +142,7 @@ export function PriceStats({ todayData, tomorrowData, resolution, currentTime }:
             <div className="flex-1">
               <p className="text-sm text-muted-foreground">{stat.label}</p>
               <p className="mt-2 font-mono text-2xl font-bold">{stat.value.toFixed(2)}</p>
-              <p className="text-sm text-muted-foreground">{language === "fi" ? "c/kWh" : t("unit")}</p>
+              <p className="text-sm text-muted-foreground">{unitLabel}</p>
               {stat.time && (
                 <p className="mt-1 font-mono text-xs text-muted-foreground">
                   {t("at")} {stat.time} {stat.day}
