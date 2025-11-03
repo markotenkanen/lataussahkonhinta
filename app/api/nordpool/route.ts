@@ -3,122 +3,62 @@ export const dynamic = "force-dynamic"
 export const revalidate = 0
 
 import { NextResponse } from "next/server"
+import { AREAS, DEFAULT_AREA } from "@/lib/areas"
 
 interface NordpoolPrice {
   timestamp: string
   price: number
 }
 
-interface PorssisahkoPrice {
-  price: number
-  startDate: string
-  endDate: string
-}
-
-async function fetchMidnightPrices(todayMidnightUTC: Date): Promise<NordpoolPrice[]> {
-  const midnightPrices: NordpoolPrice[] = []
-
-  for (let i = 0; i < 4; i++) {
-    const timestamp = new Date(todayMidnightUTC)
-    timestamp.setMinutes(i * 15)
-    const timestampISO = timestamp.toISOString()
-
-    try {
-      const url = `https://api.porssisahko.net/v2/price.json?date=${timestampISO}`
-      const response = await fetch(url, {
-        cache: "no-store",
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-
-        if (data && typeof data === "object" && typeof data.price === "number" && !isNaN(data.price)) {
-          midnightPrices.push({
-            timestamp: timestampISO,
-            price: data.price,
-          })
-        }
-      }
-    } catch (error) {}
-  }
-
-  return midnightPrices
-}
-
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const response = await fetch("https://api.porssisahko.net/v2/latest-prices.json", {
-      cache: "no-store",
-    })
+    const { searchParams } = new URL(request.url)
+    const areaParam = (searchParams.get("area") || DEFAULT_AREA).toUpperCase()
+    const areaInfo = AREAS[areaParam as keyof typeof AREAS] || AREAS[DEFAULT_AREA]
 
-    if (!response.ok) {
-      throw new Error("Failed to fetch Nordpool prices from API")
+    // 1) Fetch hourly EUR/MWh prices for selected area from Sourceful (ENTSO-E aggregated)
+    const srcUrl = `https://mainnet.srcful.dev/price/electricity/${encodeURIComponent(areaInfo.code)}`
+    const resp = await fetch(srcUrl, { cache: "no-store" })
+    if (!resp.ok) {
+      throw new Error(`Failed to fetch prices for area ${areaInfo.code}`)
     }
+    const payload = await resp.json()
+    const items: any[] = Array.isArray(payload?.prices) ? payload.prices : []
 
-    const data = await response.json()
-
-    if (!data || !Array.isArray(data.prices)) {
-      throw new Error("Invalid API response structure")
-    }
-
-    let prices: NordpoolPrice[] = data.prices
-      .filter((item: any) => {
-        return (
-          item &&
-          typeof item === "object" &&
-          typeof item.startDate === "string" &&
-          item.startDate.length > 0 &&
-          typeof item.price === "number" &&
-          !isNaN(item.price)
-        )
-      })
-      .map((item: PorssisahkoPrice) => ({
-        timestamp: item.startDate,
-        price: item.price,
-      }))
-
-    const now = new Date()
-
-    const finnishTimeStr = now.toLocaleString("en-US", {
-      timeZone: "Europe/Helsinki",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      hour12: false,
-    })
-
-    const [datePart, timePart] = finnishTimeStr.split(", ")
-    const [month, day, year] = datePart.split("/")
-    const currentHourFinnish = Number.parseInt(timePart.split(":")[0])
-
-    const yearNum = Number.parseInt(year)
-    const monthIndex = Number.parseInt(month) - 1
-    const dayNum = Number.parseInt(day)
-
-    const todayMidnightUTC = new Date(Date.UTC(yearNum, monthIndex, dayNum - 1, 21, 0, 0, 0))
-
-    const hasMidnightData = prices.some((p) => {
-      const priceTime = new Date(p.timestamp)
-      return priceTime >= todayMidnightUTC && priceTime < new Date(todayMidnightUTC.getTime() + 60 * 60 * 1000)
-    })
-
-    if (!hasMidnightData && currentHourFinnish >= 14) {
-      const midnightPrices = await fetchMidnightPrices(todayMidnightUTC)
-      if (midnightPrices.length > 0) {
-        prices = [...midnightPrices, ...prices]
+    // 2) Fetch FX rates EUR->{SEK,NOK} when needed
+    let eurToSek = 11.0
+    let eurToNok = 11.0
+    try {
+      const fxResp = await fetch("https://api.exchangerate.host/latest?base=EUR&symbols=SEK,NOK", { cache: "no-store" })
+      if (fxResp.ok) {
+        const fx = await fxResp.json()
+        eurToSek = fx?.rates?.SEK ?? eurToSek
+        eurToNok = fx?.rates?.NOK ?? eurToNok
       }
+    } catch {}
+
+    const minorPerEur: Record<string, number> = {
+      EUR: 100, // cents
+      SEK: eurToSek * 100, // öre
+      NOK: eurToNok * 100, // øre
     }
 
-    prices.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+    // 3) Convert EUR/MWh -> local minor unit per kWh
+    // formula: (EUR_per_MWh * local_minor_per_EUR) / 1000
+    const out: NordpoolPrice[] = items
+      .filter((it) => typeof it?.datetime === "string" && typeof it?.price === "number")
+      .map((it) => {
+        const eurPerMwh = it.price as number
+        const localMinorPerEur = minorPerEur[areaInfo.currency]
+        const value = (eurPerMwh * localMinorPerEur) / 1000
+        return {
+          timestamp: it.datetime, // UTC ISO from provider
+          price: value, // minor unit per kWh (c/øre per kWh)
+        }
+      })
+      .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
 
-    const finalPrices = prices.filter((p) => {
-      return (
-        p && typeof p.timestamp === "string" && p.timestamp.length > 0 && typeof p.price === "number" && !isNaN(p.price)
-      )
-    })
-
-    return NextResponse.json(finalPrices, {
+    return NextResponse.json(out, {
       headers: {
         "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0",
         "CDN-Cache-Control": "no-store",

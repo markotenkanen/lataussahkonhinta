@@ -11,8 +11,9 @@ import { PriceList } from "@/components/price-list"
 import { LanguageSelector } from "@/components/language-selector"
 import { Zap, Activity, ChevronDown, ChevronUp, RefreshCw } from "lucide-react"
 import useSWR from "swr"
-import { isSameDayInFinland } from "@/lib/date-utils"
+import { isSameDayInTimezone } from "@/lib/date-utils"
 import { useTranslation } from "@/lib/translations"
+import { AREAS, DEFAULT_AREA, AREA_OPTIONS, type AreaCode } from "@/lib/areas"
 
 export interface PriceData {
   timestamp: string
@@ -234,6 +235,15 @@ export function ElectricityDashboard() {
   const [showRefreshSuccess, setShowRefreshSuccess] = useState(false)
   const [lastRefreshTime, setLastRefreshTime] = useState<Date | null>(null)
 
+  const [area, setArea] = useState<AreaCode>(() => {
+    if (typeof window === "undefined") return DEFAULT_AREA
+    try {
+      const saved = localStorage.getItem("area") as AreaCode
+      if (saved && AREAS[saved]) return saved
+    } catch {}
+    return DEFAULT_AREA
+  })
+
   const [systemSettings, setSystemSettings] = useState(() => {
     if (typeof window === "undefined") {
       return {
@@ -287,7 +297,13 @@ export function ElectricityDashboard() {
     }
   }, [language])
 
-  const { data, error, isLoading, mutate } = useSWR<PriceData[]>("/api/nordpool", fetcher, {
+  useEffect(() => {
+    try {
+      localStorage.setItem("area", area)
+    } catch {}
+  }, [area])
+
+  const { data, error, isLoading, mutate } = useSWR<PriceData[]>(`/api/nordpool?area=${area}`, fetcher, {
     revalidateOnFocus: false,
     revalidateOnMount: true,
     revalidateOnReconnect: false,
@@ -342,15 +358,17 @@ export function ElectricityDashboard() {
 
   const todayPrices = useMemo(() => {
     if (!processedData) return []
-    return processedData.filter((item) => isSameDayInFinland(new Date(item.timestamp), currentTime))
-  }, [processedData, currentTime])
+    const tz = AREAS[area].timezone
+    return processedData.filter((item) => isSameDayInTimezone(new Date(item.timestamp), currentTime, tz))
+  }, [processedData, currentTime, area])
 
   const tomorrowPrices = useMemo(() => {
     if (!processedData) return []
     const tomorrow = new Date(currentTime)
     tomorrow.setDate(tomorrow.getDate() + 1)
-    return processedData.filter((item) => isSameDayInFinland(new Date(item.timestamp), tomorrow))
-  }, [processedData, currentTime])
+    const tz = AREAS[area].timezone
+    return processedData.filter((item) => isSameDayInTimezone(new Date(item.timestamp), tomorrow, tz))
+  }, [processedData, currentTime, area])
 
   const futurePrices = useMemo(() => {
     if (!processedData) return []
@@ -449,6 +467,21 @@ export function ElectricityDashboard() {
             {/* Language selector - first on mobile */}
             <LanguageSelector currentLanguage={language} onLanguageChange={setLanguage} />
 
+            {/* Area selector */}
+            <div className="rounded-lg border bg-card p-1">
+              <select
+                value={area}
+                onChange={(e) => setArea(e.target.value as AreaCode)}
+                className="h-8 rounded-md bg-transparent px-2 text-sm"
+              >
+                {AREA_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             {/* Resolution buttons - second on mobile */}
             <div className="flex items-center gap-2 rounded-lg border bg-card p-1">
               <Button
@@ -502,13 +535,20 @@ export function ElectricityDashboard() {
         </div>
 
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
-          <CurrentPrice data={processedData} currentTime={currentTime} resolution={resolution} language={language} />
+          <CurrentPrice
+            data={processedData}
+            currentTime={currentTime}
+            resolution={resolution}
+            timezone={AREAS[area].timezone}
+            unitLabel={AREAS[area].unitLabel}
+          />
           <PriceStats
             todayData={todayPrices}
             tomorrowData={tomorrowPrices}
             resolution={resolution}
             currentTime={currentTime}
-            language={language}
+            timezone={AREAS[area].timezone}
+            unitLabel={AREAS[area].unitLabel}
           />
         </div>
 
@@ -524,6 +564,8 @@ export function ElectricityDashboard() {
             currentTime={currentTime}
             resolution={resolution}
             chargingWindow={bestChargingWindow}
+            timezone={AREAS[area].timezone}
+            unitLabel={AREAS[area].unitLabel}
           />
         </Card>
 
@@ -549,7 +591,14 @@ export function ElectricityDashboard() {
               )}
             </Button>
           </div>
-          {showPriceList && <PriceList data={processedData} resolution={resolution} />}
+          {showPriceList && (
+            <PriceList
+              data={processedData}
+              resolution={resolution}
+              timezone={AREAS[area].timezone}
+              unitLabel={AREAS[area].unitLabel}
+            />
+          )}
         </Card>
 
         <ChargingRecommendation
@@ -558,7 +607,8 @@ export function ElectricityDashboard() {
           resolution={resolution}
           chargerPower={systemSettings.chargerPower}
           batterySize={systemSettings.batterySize}
-          language={language}
+          timezone={AREAS[area].timezone}
+          currencySymbol={AREAS[area].currencySymbol}
         />
 
         <Card className="border-muted/50 bg-muted/20 p-6">

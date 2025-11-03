@@ -6,6 +6,8 @@ import { useTranslation } from "@/lib/translations"
 interface PriceListProps {
   data: PriceData[]
   resolution: "hourly" | "15min"
+  timezone: string
+  unitLabel: string
 }
 
 function getPriceColor(price: number): string {
@@ -22,10 +24,9 @@ function getPriceBgColor(price: number): string {
   return "bg-red-50 dark:bg-red-950/30"
 }
 
-export function PriceList({ data, resolution }: PriceListProps) {
+export function PriceList({ data, resolution, timezone, unitLabel }: PriceListProps) {
   const { t, language } = useTranslation()
   const now = new Date()
-  const timezone = "Europe/Helsinki"
   const currentTimeInTz = getDateInTimezone(now, timezone)
 
   const isCurrentTimeSlot = (itemDate: Date): boolean => {
@@ -87,7 +88,7 @@ export function PriceList({ data, resolution }: PriceListProps) {
                 </p>
                 <p className={`text-2xl font-bold tabular-nums ${getPriceColor(item.price)}`}>
                   {item.price.toFixed(2)}
-                  <span className="ml-1 text-sm font-normal">c/kWh</span>
+                  <span className="ml-1 text-sm font-normal">{unitLabel}</span>
                 </p>
               </div>
             </div>

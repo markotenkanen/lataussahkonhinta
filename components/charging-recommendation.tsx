@@ -4,7 +4,7 @@ import { useMemo } from "react"
 import { Card } from "@/components/ui/card"
 import { Battery, Clock, Euro, Zap, TrendingDown } from "lucide-react"
 import type { PriceData, Resolution } from "./electricity-dashboard"
-import { formatFinnishTime, isSameDayInFinland } from "@/lib/date-utils"
+import { formatTimeInTimezone, isSameDayInTimezone } from "@/lib/date-utils"
 import { useTranslation } from "@/lib/translations"
 
 interface ChargingRecommendationProps {
@@ -13,6 +13,8 @@ interface ChargingRecommendationProps {
   resolution: Resolution
   chargerPower: number
   batterySize: number
+  timezone: string
+  currencySymbol: string
 }
 
 export function ChargingRecommendation({
@@ -21,6 +23,8 @@ export function ChargingRecommendation({
   resolution,
   chargerPower,
   batterySize,
+  timezone,
+  currencySymbol,
 }: ChargingRecommendationProps) {
   const { t, language } = useTranslation()
 
@@ -73,10 +77,10 @@ export function ChargingRecommendation({
     const hours = batterySize / chargerPower
 
     const windowStartDate = new Date(window.start.timestamp)
-    const isToday = isSameDayInFinland(windowStartDate, currentTime)
+    const isToday = isSameDayInTimezone(windowStartDate, currentTime, timezone)
     const tomorrow = new Date(currentTime)
     tomorrow.setDate(tomorrow.getDate() + 1)
-    const isTomorrow = isSameDayInFinland(windowStartDate, tomorrow)
+    const isTomorrow = isSameDayInTimezone(windowStartDate, tomorrow, timezone)
 
     const dayLabels = {
       fi: { today: "Tänään", tomorrow: "Huomenna" },
@@ -94,7 +98,7 @@ export function ChargingRecommendation({
       windowDay: day,
       chargingHours: hours,
     }
-  }, [data, currentTime, resolution, chargerPower, batterySize, language])
+  }, [data, currentTime, resolution, chargerPower, batterySize, language, timezone])
 
   if (!bestWindow) {
     return (
@@ -128,8 +132,8 @@ export function ChargingRecommendation({
             <div>
               <p className="text-sm text-muted-foreground">{t("bestChargingTime")}</p>
               <p className="font-mono text-lg font-semibold">
-                {formatFinnishTime(new Date(bestWindow.start.timestamp))} -{" "}
-                {formatFinnishTime(new Date(bestWindow.end.timestamp))}
+                {formatTimeInTimezone(new Date(bestWindow.start.timestamp), timezone)} - {" "}
+                {formatTimeInTimezone(new Date(bestWindow.end.timestamp), timezone)}
               </p>
               {windowDay && <p className="text-xs text-muted-foreground">{windowDay}</p>}
             </div>
@@ -168,7 +172,7 @@ export function ChargingRecommendation({
               <p className="text-sm text-muted-foreground">
                 {t("estimatedCost")} ({batterySize}kWh)
               </p>
-              <p className="font-mono text-lg font-semibold">€{chargeCost.toFixed(2)}</p>
+              <p className="font-mono text-lg font-semibold">{currencySymbol}{chargeCost.toFixed(2)}</p>
             </div>
           </div>
         </div>
@@ -179,7 +183,7 @@ export function ChargingRecommendation({
         <h3 className="mb-2 font-semibold">💡 {t("smartChargingTips")}</h3>
         <ul className="space-y-1 text-sm text-muted-foreground">
           <li>
-            • {chargerPower}kW {t("chargerCharges")} {batterySize}kWh {t("batteryFromEmptyToFull")}{" "}
+            • {chargerPower}kW {t("chargerCharges")} {batterySize}kWh {t("batteryFromEmptyToFull")} {" "}
             {chargingHours.toFixed(1)} {t("hours")}
           </li>
           <li>• {t("scheduleChargingTip")}</li>
