@@ -1,0 +1,5 @@
+{
+  "name": "eslint-config-next",
+  "version": "99.0.0",
+  "main": "./index.js"
+}
