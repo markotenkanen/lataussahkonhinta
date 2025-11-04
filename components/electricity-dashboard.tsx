@@ -22,21 +22,25 @@ export interface PriceData {
 
 export type Resolution = "hourly" | "15min"
 
-const CACHE_KEY = "nordpool_price_data"
+const CACHE_PREFIX = "nordpool_price_data"
 const CACHE_VERSION = 3
 
-function getCachedData(): { data: PriceData[]; date: string; fetchedAt: string; version: number } | null {
+function cacheKeyFor(area: string) {
+  return `${CACHE_PREFIX}:${area}`
+}
+
+function getCachedData(area: string): { data: PriceData[]; date: string; fetchedAt: string; version: number } | null {
   if (typeof window === "undefined") return null
 
   try {
-    const cached = localStorage.getItem(CACHE_KEY)
+    const cached = localStorage.getItem(cacheKeyFor(area))
     if (!cached) return null
 
     const parsed = JSON.parse(cached)
 
     if (!parsed.version || parsed.version < CACHE_VERSION) {
       console.log("[v0] Old cache format detected, clearing cache")
-      localStorage.removeItem(CACHE_KEY)
+      localStorage.removeItem(cacheKeyFor(area))
       return null
     }
 
@@ -47,7 +51,7 @@ function getCachedData(): { data: PriceData[]; date: string; fetchedAt: string; 
   }
 }
 
-function setCachedData(data: PriceData[]) {
+function setCachedData(area: string, data: PriceData[]) {
   if (typeof window === "undefined") return
 
   try {
@@ -65,8 +69,8 @@ function setCachedData(data: PriceData[]) {
       version: CACHE_VERSION,
     }
 
-    console.log("[v0] Caching data with fetchedAt:", cacheData.fetchedAt)
-    localStorage.setItem(CACHE_KEY, JSON.stringify(cacheData))
+    console.log("[v0] Caching data with fetchedAt:", cacheData.fetchedAt, "area:", area)
+    localStorage.setItem(cacheKeyFor(area), JSON.stringify(cacheData))
   } catch (error) {
     console.error("Failed to cache data:", error)
   }
@@ -156,16 +160,25 @@ function isCacheValid(cachedDate: string, fetchedAt?: string): boolean {
 }
 
 const fetcher = async (url: string) => {
-  const cached = getCachedData()
+  // Derive area from the URL passed by useSWR
+  let area = DEFAULT_AREA
+  try {
+    const u = new URL(url, typeof window !== "undefined" ? window.location.origin : "http://localhost")
+    area = (u.searchParams.get("area") || DEFAULT_AREA) as AreaCode
+  } catch {}
+
+  const cached = getCachedData(area)
   if (cached && isCacheValid(cached.date, cached.fetchedAt)) {
-    console.log("[v0] Using cached data from:", cached.date, "fetched at:", cached.fetchedAt)
+    console.log("[v0] Using cached data from:", cached.date, "fetched at:", cached.fetchedAt, "area:", area)
     return cached.data
   }
 
   console.log("[v0] Fetching fresh data from API")
 
-  const cacheBuster = Date.now()
-  const res = await fetch(`${url}?t=${cacheBuster}`, {
+  // Build URL with cache buster safely (handles existing query params)
+  const u = new URL(url, typeof window !== "undefined" ? window.location.origin : "http://localhost")
+  u.searchParams.set("t", String(Date.now()))
+  const res = await fetch(u.toString(), {
     cache: "no-store",
   })
 
@@ -188,7 +201,7 @@ const fetcher = async (url: string) => {
     return item && typeof item.timestamp === "string" && typeof item.price === "number"
   })
 
-  setCachedData(validData)
+  setCachedData(area, validData)
 
   return validData
 }
@@ -225,11 +238,37 @@ function aggregateToHourly(data: PriceData[]): PriceData[] {
     .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
 }
 
+function isFifteenMinCadence(data: PriceData[]): boolean {
+  if (!data || data.length < 2) return false
+  const d0 = new Date(data[0].timestamp).getTime()
+  const d1 = new Date(data[1].timestamp).getTime()
+  const diff = Math.abs(d1 - d0)
+  return diff <= 15 * 60 * 1000 + 1000 // allow 1s slack
+}
+
+function expandTo15Min(data: PriceData[]): PriceData[] {
+  const out: PriceData[] = []
+  for (const item of data) {
+    const base = new Date(item.timestamp)
+    const m0 = new Date(base)
+    m0.setMinutes(0, 0, 0)
+    const start = new Date(base)
+    start.setMinutes(0, 0, 0)
+    // Ensure we create 4 quarters within the same hour of the base timestamp
+    for (const add of [0, 15, 30, 45]) {
+      const t = new Date(start)
+      t.setMinutes(t.getMinutes() + add)
+      out.push({ timestamp: t.toISOString(), price: item.price })
+    }
+  }
+  return out.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+}
+
 export function ElectricityDashboard() {
   const { language, setLanguage, t } = useTranslation()
 
   const [currentTime, setCurrentTime] = useState(new Date())
-  const [resolution, setResolution] = useState<Resolution>("15min")
+  const [resolution, setResolution] = useState<Resolution>("hourly")
   const [showPriceList, setShowPriceList] = useState(false)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [showRefreshSuccess, setShowRefreshSuccess] = useState(false)
@@ -327,7 +366,7 @@ export function ElectricityDashboard() {
       const pricePublishTime = 14 * 60 + 20 // 14:20
 
       if (currentMinutes >= pricePublishTime) {
-        const cached = getCachedData()
+        const cached = getCachedData(area)
         if (cached && !isCacheValid(cached.date, cached.fetchedAt)) {
           console.log("[v0] Time is after 14:20, revalidating to fetch tomorrow's prices")
           mutate()
@@ -340,7 +379,7 @@ export function ElectricityDashboard() {
     const interval = setInterval(checkAndRevalidate, 5 * 60 * 1000)
 
     return () => clearInterval(interval)
-  }, [mutate])
+  }, [mutate, area])
 
   useEffect(() => {
     if (data && data.length > 0) {
@@ -353,7 +392,10 @@ export function ElectricityDashboard() {
 
   const processedData = useMemo(() => {
     if (!data) return []
-    return resolution === "hourly" ? aggregateToHourly(data) : data
+    if (resolution === "hourly") return aggregateToHourly(data)
+    // 15min view: if backend already 15-min cadence, return as-is, else expand hourly -> 15min
+    if (isFifteenMinCadence(data)) return data
+    return expandTo15Min(aggregateToHourly(data))
   }, [data, resolution])
 
   const todayPrices = useMemo(() => {
@@ -406,8 +448,22 @@ export function ElectricityDashboard() {
     setShowRefreshSuccess(false)
 
     try {
-      localStorage.removeItem(CACHE_KEY)
-      console.log("[v0] Manual refresh: cleared price data cache")
+      // Clear all area caches for this feature
+      if (typeof window !== "undefined") {
+        const toRemove: string[] = []
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i)
+          if (key && key.startsWith(CACHE_PREFIX + ":")) {
+            toRemove.push(key)
+          }
+        }
+        // Also remove legacy global cache key from older versions
+        if (localStorage.getItem(CACHE_PREFIX)) {
+          toRemove.push(CACHE_PREFIX)
+        }
+        toRemove.forEach((k) => localStorage.removeItem(k))
+        console.log("[v0] Manual refresh: cleared price data caches:", toRemove)
+      }
 
       const startTime = Date.now()
       await mutate()
