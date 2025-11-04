@@ -17,13 +17,14 @@ import { AREAS, DEFAULT_AREA, AREA_OPTIONS, type AreaCode } from "@/lib/areas"
 
 export interface PriceData {
   timestamp: string
-  price: number // cents/kWh
+  price: number // cents/kWh (including VAT)
 }
 
 export type Resolution = "hourly" | "15min"
 
 const CACHE_PREFIX = "nordpool_price_data"
-const CACHE_VERSION = 3
+const CACHE_VERSION = 4
+const VAT_MULTIPLIER = 1.24
 
 function cacheKeyFor(area: string) {
   return `${CACHE_PREFIX}:${area}`
@@ -197,9 +198,14 @@ const fetcher = async (url: string) => {
     throw new Error("Invalid data format: expected array")
   }
 
-  const validData = data.filter((item: any) => {
-    return item && typeof item.timestamp === "string" && typeof item.price === "number"
-  })
+  const validData = data
+    .filter((item: any) => {
+      return item && typeof item.timestamp === "string" && typeof item.price === "number"
+    })
+    .map((item: any) => ({
+      timestamp: item.timestamp,
+      price: Number((item.price * VAT_MULTIPLIER).toFixed(4)),
+    }))
 
   setCachedData(area, validData)
 
