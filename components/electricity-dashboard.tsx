@@ -540,7 +540,7 @@ export function ElectricityDashboard() {
   return (
     <div className="min-h-screen p-4 md:p-8">
       <div className="mx-auto max-w-7xl space-y-6">
-        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div className="flex flex-col gap-4">
           <div className="md:flex-1">
             <h1 className="flex flex-wrap items-center gap-3 text-3xl font-bold tracking-tight md:flex-nowrap md:whitespace-nowrap md:text-4xl">
               <Zap className="h-8 w-8 text-primary md:h-10 md:w-10" />
@@ -549,7 +549,7 @@ export function ElectricityDashboard() {
             </h1>
             <p className="mt-2 text-muted-foreground">{t("subtitle")}</p>
           </div>
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:gap-4">
+          <div className="flex flex-col gap-3 md:flex-row md:flex-wrap md:items-center md:gap-4">
             {/* Language selector - first on mobile */}
             <LanguageSelector currentLanguage={language} onLanguageChange={setLanguage} />
 
