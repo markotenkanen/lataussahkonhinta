@@ -540,6 +540,9 @@ export function ElectricityDashboard() {
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div className="md:flex-1">
             <h1 className="flex flex-wrap items-center gap-3 text-3xl font-bold tracking-tight md:flex-nowrap md:whitespace-nowrap md:text-4xl">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h1 className="flex flex-wrap items-center gap-3 text-3xl font-bold tracking-tight text-balance md:text-4xl">
               <Zap className="h-8 w-8 text-primary md:h-10 md:w-10" />
               {t("title")}
               <span className="text-sm font-medium text-muted-foreground md:text-base">{APP_VERSION}</span>

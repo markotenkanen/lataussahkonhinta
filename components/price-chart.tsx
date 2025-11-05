@@ -40,6 +40,14 @@ function resolveColor(price: number, thresholds: PriceColorThresholds): string {
     return PRICE_COLORS.yellow
   }
   if (price < thresholds.orangeMax) {
+function getColorForPrice(price: number): string {
+  if (price < 5) {
+    return PRICE_COLORS.green
+  }
+  if (price < 10) {
+    return PRICE_COLORS.yellow
+  }
+  if (price < 20) {
     return PRICE_COLORS.orange
   }
   return PRICE_COLORS.red
@@ -235,6 +243,9 @@ export function PriceChart({
       { value: orangeMax, color: PRICE_COLORS.orange },
       { value: yellowMax, color: PRICE_COLORS.yellow },
       { value: greenMax, color: PRICE_COLORS.green },
+      { value: 20, color: PRICE_COLORS.orange },
+      { value: 10, color: PRICE_COLORS.yellow },
+      { value: 5, color: PRICE_COLORS.green },
     ]
 
     thresholds.forEach(({ value, color }) => {
@@ -262,6 +273,7 @@ export function PriceChart({
       }
     })
   }, [chartData, getColorForPrice, greenMax, orangeMax, yellowMax])
+  }, [chartData])
 
   return (
     <ResponsiveContainer width="100%" height={400}>
