@@ -13,6 +13,7 @@ import { Zap, Activity, ChevronDown, ChevronUp, RefreshCw } from "lucide-react"
 import useSWR from "swr"
 import { isSameDayInTimezone } from "@/lib/date-utils"
 import { useTranslation } from "@/lib/translations"
+import { APP_VERSION } from "@/lib/version"
 import { AREAS, DEFAULT_AREA, AREA_OPTIONS, type AreaCode } from "@/lib/areas"
 
 export interface PriceData {
@@ -519,9 +520,10 @@ export function ElectricityDashboard() {
       <div className="mx-auto max-w-7xl space-y-6">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <h1 className="flex items-center gap-3 text-3xl font-bold tracking-tight text-balance md:text-4xl">
+            <h1 className="flex flex-wrap items-center gap-3 text-3xl font-bold tracking-tight text-balance md:text-4xl">
               <Zap className="h-8 w-8 text-primary md:h-10 md:w-10" />
               {t("title")}
+              <span className="text-sm font-medium text-muted-foreground md:text-base">{APP_VERSION}</span>
             </h1>
             <p className="mt-2 text-muted-foreground">{t("subtitle")}</p>
           </div>
