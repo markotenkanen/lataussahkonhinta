@@ -1,7 +1,7 @@
 {
-  "name": "Suomen alueen pörssisähkön hintaseuranta",
+  "name": "Suomi, Ruotsi, Norja pörssisähkön hintaseuranta",
   "short_name": "Pörssisähkö",
-  "description": "Seuraa Nordpool-sähkön hintoja ja saa lataussuosituksia sähköautolle",
+  "description": "Seuraa Nord Pool -sähkön hintoja Suomessa, Ruotsissa ja Norjassa ja saa lataussuosituksia sähköautolle",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0a0a0a",

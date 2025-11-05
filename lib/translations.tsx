@@ -6,7 +6,7 @@ export type Language = "fi" | "sv" | "en"
 
 export const translations = {
   fi: {
-    title: "Suomen alueen pörssisähkön hintaseuranta",
+    title: "Suomi, Ruotsi, Norja pörssisähkön hintaseuranta",
     subtitle: "Reaaliaikainen hintatieto sähköauton järkevään latauksen ajoittamiseen",
     hourly: "1 tunti",
     fifteenMin: "15 min",
@@ -22,7 +22,7 @@ export const translations = {
     highestTomorrow: "Kallein huomenna",
     averageTomorrow: "Keskihinta huomenna",
     now: "Nyt",
-    unit: "c/kWh",
+    unit: "c/kWh (sis. ALV 24%)",
     today: "Tänään",
     tomorrow: "Huomenna",
     at: "klo",
@@ -61,7 +61,7 @@ export const translations = {
     reload: "Lataa uudelleen",
   },
   sv: {
-    title: "Nordpool elpriser för Finland",
+    title: "Elspotpriser för Finland, Sverige och Norge",
     subtitle: "Realtidsprisinformation för smart laddning av elbilar",
     hourly: "1 timme",
     fifteenMin: "15 min",
@@ -77,7 +77,7 @@ export const translations = {
     highestTomorrow: "Högsta imorgon",
     averageTomorrow: "Medelpris imorgon",
     now: "Nu",
-    unit: "c/kWh",
+    unit: "c/kWh (inkl. moms 24 %)",
     today: "Idag",
     tomorrow: "Imorgon",
     at: "kl",
@@ -117,7 +117,7 @@ export const translations = {
     reload: "Ladda om",
   },
   en: {
-    title: "Nordpool electricity prices for Finland",
+    title: "Nord Pool electricity prices for Finland, Sweden and Norway",
     subtitle: "Real-time price information for smart EV charging",
     hourly: "1 hour",
     fifteenMin: "15 min",
@@ -133,7 +133,7 @@ export const translations = {
     highestTomorrow: "Highest tomorrow",
     averageTomorrow: "Average tomorrow",
     now: "Now",
-    unit: "c/kWh",
+    unit: "c/kWh (incl. VAT 24%)",
     today: "Today",
     tomorrow: "Tomorrow",
     at: "at",
