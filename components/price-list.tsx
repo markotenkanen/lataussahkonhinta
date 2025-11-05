@@ -1,5 +1,5 @@
 "use client"
-import type { PriceData } from "@/components/electricity-dashboard"
+import type { PriceColorThresholds, PriceData } from "@/components/electricity-dashboard"
 import { getDateInTimezone } from "@/lib/date-utils"
 import { useTranslation } from "@/lib/translations"
 
@@ -8,23 +8,24 @@ interface PriceListProps {
   resolution: "hourly" | "15min"
   timezone: string
   unitLabel: string
+  colorThresholds: PriceColorThresholds
 }
 
-function getPriceColor(price: number): string {
-  if (price < 5) return "text-green-600 dark:text-green-400"
-  if (price < 10) return "text-yellow-600 dark:text-yellow-400"
-  if (price < 20) return "text-orange-600 dark:text-orange-400"
+function getPriceColor(price: number, thresholds: PriceColorThresholds): string {
+  if (price < thresholds.greenMax) return "text-green-600 dark:text-green-400"
+  if (price < thresholds.yellowMax) return "text-yellow-600 dark:text-yellow-400"
+  if (price < thresholds.orangeMax) return "text-orange-600 dark:text-orange-400"
   return "text-red-600 dark:text-red-400"
 }
 
-function getPriceBgColor(price: number): string {
-  if (price < 5) return "bg-green-50 dark:bg-green-950/30"
-  if (price < 10) return "bg-yellow-50 dark:bg-yellow-950/30"
-  if (price < 20) return "bg-orange-50 dark:bg-orange-950/30"
+function getPriceBgColor(price: number, thresholds: PriceColorThresholds): string {
+  if (price < thresholds.greenMax) return "bg-green-50 dark:bg-green-950/30"
+  if (price < thresholds.yellowMax) return "bg-yellow-50 dark:bg-yellow-950/30"
+  if (price < thresholds.orangeMax) return "bg-orange-50 dark:bg-orange-950/30"
   return "bg-red-50 dark:bg-red-950/30"
 }
 
-export function PriceList({ data, resolution, timezone, unitLabel }: PriceListProps) {
+export function PriceList({ data, resolution, timezone, unitLabel, colorThresholds }: PriceListProps) {
   const { t, language } = useTranslation()
   const now = new Date()
   const currentTimeInTz = getDateInTimezone(now, timezone)
@@ -72,12 +73,12 @@ export function PriceList({ data, resolution, timezone, unitLabel }: PriceListPr
         return (
           <div
             key={index}
-            className={`rounded-lg border p-3 transition-colors ${getPriceBgColor(item.price)} ${
+            className={`rounded-lg border p-3 transition-colors ${getPriceBgColor(item.price, colorThresholds)} ${
               isCurrent
                 ? "border-blue-500 border-2 ring-2 ring-blue-200 dark:ring-blue-800"
                 : isCurrentOrPast
-                  ? "opacity-60"
-                  : ""
+                    ? "opacity-60"
+                    : ""
             }`}
           >
             <div className="flex items-baseline justify-between gap-2">
@@ -86,7 +87,7 @@ export function PriceList({ data, resolution, timezone, unitLabel }: PriceListPr
                   {dateFormat} {timeFormat}
                   {isCurrent && <span className="ml-2 font-semibold text-blue-600 dark:text-blue-400">{t("now")}</span>}
                 </p>
-                <p className={`text-2xl font-bold tabular-nums ${getPriceColor(item.price)}`}>
+                <p className={`text-2xl font-bold tabular-nums ${getPriceColor(item.price, colorThresholds)}`}>
                   {item.price.toFixed(2)}
                   <span className="ml-1 text-sm font-normal">{unitLabel}</span>
                 </p>
