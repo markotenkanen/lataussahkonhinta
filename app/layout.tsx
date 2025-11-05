@@ -7,8 +7,9 @@ import "./globals.css"
 import { Suspense } from "react"
 
 export const metadata: Metadata = {
-  title: "Suomen alueen pörssisähkön hintaseuranta",
-  description: "Seuraa Nordpool-sähkön hintoja ja saa lataussuosituksia sähköautolle",
+  title: "Suomi, Ruotsi, Norja pörssisähkön hintaseuranta",
+  description:
+    "Seuraa Nord Pool -sähkön hintoja Suomessa, Ruotsissa ja Norjassa ja saa lataussuosituksia sähköautolle",
   generator: "v0.app",
   manifest: "/manifest.json",
   appleWebApp: {
