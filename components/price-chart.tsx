@@ -12,7 +12,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts"
-import type { PriceData, Resolution } from "./electricity-dashboard"
+import type { PriceColorThresholds, PriceData, Resolution } from "./electricity-dashboard"
 import { getDateInTimezone } from "@/lib/date-utils"
 
 interface PriceChartProps {
@@ -22,21 +22,44 @@ interface PriceChartProps {
   chargingWindow?: { startIndex: number; endIndex: number } | null
   timezone: string
   unitLabel: string
+  colorThresholds: PriceColorThresholds
 }
 
-function getPriceColor(price: number): string {
-  if (price < 10) {
-    return "hsl(142, 76%, 36%)" // Green for low prices (0-10 c/kWh)
-  } else if (price < 20) {
-    return "hsl(48, 96%, 53%)" // Yellow for medium prices (10-20 c/kWh)
-  } else if (price < 40) {
-    return "hsl(25, 95%, 53%)" // Orange for high prices (20-40 c/kWh)
-  } else {
-    return "hsl(0, 84%, 60%)" // Red for extreme prices (40+ c/kWh)
+const PRICE_COLORS = {
+  green: "#16a34a",
+  yellow: "#facc15",
+  orange: "#f97316",
+  red: "#dc2626",
+} as const
+
+function resolveColor(price: number, thresholds: PriceColorThresholds): string {
+  if (price < thresholds.greenMax) {
+    return PRICE_COLORS.green
   }
+  if (price < thresholds.yellowMax) {
+    return PRICE_COLORS.yellow
+  }
+  if (price < thresholds.orangeMax) {
+    return PRICE_COLORS.orange
+  }
+  return PRICE_COLORS.red
 }
 
-export function PriceChart({ data, currentTime, resolution, chargingWindow, timezone, unitLabel }: PriceChartProps) {
+export function PriceChart({
+  data,
+  currentTime,
+  resolution,
+  chargingWindow,
+  timezone,
+  unitLabel,
+  colorThresholds,
+}: PriceChartProps) {
+  const { greenMax, yellowMax, orangeMax } = colorThresholds
+
+  const getColorForPrice = useMemo(() => {
+    return (price: number) => resolveColor(price, colorThresholds)
+  }, [colorThresholds])
+
   const { chartData, avgPrice, currentTimeIndex } = useMemo(() => {
     const prices = data.map((item) => item.price)
     const avg = prices.reduce((sum, price) => sum + price, 0) / prices.length
@@ -57,7 +80,7 @@ export function PriceChart({ data, currentTime, resolution, chargingWindow, time
         }),
         price: item.price,
         timestamp: item.timestamp,
-        color: getPriceColor(item.price),
+        color: getColorForPrice(item.price),
       }
     })
 
@@ -125,7 +148,7 @@ export function PriceChart({ data, currentTime, resolution, chargingWindow, time
       ({ active, payload }: any) => {
         if (active && payload && payload.length) {
           const price = payload[0].value
-          const color = getPriceColor(price)
+          const color = getColorForPrice(price)
 
           return (
             <div className="rounded-lg border-2 bg-card p-3 shadow-xl" style={{ borderColor: color }}>
@@ -139,7 +162,7 @@ export function PriceChart({ data, currentTime, resolution, chargingWindow, time
         }
         return null
       },
-    [unitLabel],
+    [getColorForPrice, unitLabel],
   )
 
   const tickInterval = useMemo(() => {
@@ -176,15 +199,83 @@ export function PriceChart({ data, currentTime, resolution, chargingWindow, time
     )
   }
 
+  const gradientStops = useMemo(() => {
+    if (chartData.length === 0) {
+      return [
+        { offset: "0%", color: PRICE_COLORS.red, opacity: 0.7 },
+        { offset: "100%", color: PRICE_COLORS.green, opacity: 0.3 },
+      ]
+    }
+
+    const prices = chartData.map((item) => item.price)
+    const minPrice = Math.min(...prices)
+    const maxPrice = Math.max(...prices)
+
+    if (!Number.isFinite(minPrice) || !Number.isFinite(maxPrice)) {
+      return [
+        { offset: "0%", color: PRICE_COLORS.red, opacity: 0.7 },
+        { offset: "100%", color: PRICE_COLORS.green, opacity: 0.3 },
+      ]
+    }
+
+    if (Math.abs(maxPrice - minPrice) < 1e-6) {
+      const color = getColorForPrice(minPrice)
+      return [
+        { offset: "0%", color, opacity: 0.7 },
+        { offset: "100%", color, opacity: 0.3 },
+      ]
+    }
+
+    const range = maxPrice - minPrice
+    const stops: { value: number; color: string }[] = [
+      { value: maxPrice, color: getColorForPrice(maxPrice) },
+    ]
+
+    const thresholds = [
+      { value: orangeMax, color: PRICE_COLORS.orange },
+      { value: yellowMax, color: PRICE_COLORS.yellow },
+      { value: greenMax, color: PRICE_COLORS.green },
+    ]
+
+    thresholds.forEach(({ value, color }) => {
+      if (value <= maxPrice && value >= minPrice) {
+        stops.push({ value, color })
+      }
+    })
+
+    stops.push({ value: minPrice, color: getColorForPrice(minPrice) })
+
+    const uniqueStops = Array.from(
+      new Map(stops.map((stop) => [stop.value, stop])).values(),
+    ).sort((a, b) => b.value - a.value)
+
+    return uniqueStops.map((stop, index) => {
+      const normalized = (stop.value - minPrice) / range
+      const offset = 1 - normalized
+      const opacity =
+        0.85 - 0.5 * (index / Math.max(uniqueStops.length - 1, 1))
+
+      return {
+        offset: `${(offset * 100).toFixed(2)}%`,
+        color: stop.color,
+        opacity: Number(opacity.toFixed(2)),
+      }
+    })
+  }, [chartData, getColorForPrice, greenMax, orangeMax, yellowMax])
+
   return (
     <ResponsiveContainer width="100%" height={400}>
       <AreaChart data={chartData} margin={{ top: 40, right: 30, left: 0, bottom: 0 }}>
         <defs>
           <linearGradient id="priceGradient" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="hsl(0, 84%, 60%)" stopOpacity={0.8} />
-            <stop offset="33%" stopColor="hsl(25, 95%, 53%)" stopOpacity={0.6} />
-            <stop offset="67%" stopColor="hsl(48, 96%, 53%)" stopOpacity={0.4} />
-            <stop offset="100%" stopColor="hsl(142, 76%, 36%)" stopOpacity={0.3} />
+            {gradientStops.map((stop) => (
+              <stop
+                key={stop.offset}
+                offset={stop.offset}
+                stopColor={stop.color}
+                stopOpacity={stop.opacity}
+              />
+            ))}
           </linearGradient>
         </defs>
         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
