@@ -11,16 +11,16 @@ interface PriceListProps {
 }
 
 function getPriceColor(price: number): string {
-  if (price < 10) return "text-green-600 dark:text-green-400"
-  if (price < 20) return "text-yellow-600 dark:text-yellow-400"
-  if (price < 40) return "text-orange-600 dark:text-orange-400"
+  if (price < 5) return "text-green-600 dark:text-green-400"
+  if (price < 10) return "text-yellow-600 dark:text-yellow-400"
+  if (price < 20) return "text-orange-600 dark:text-orange-400"
   return "text-red-600 dark:text-red-400"
 }
 
 function getPriceBgColor(price: number): string {
-  if (price < 10) return "bg-green-50 dark:bg-green-950/30"
-  if (price < 20) return "bg-yellow-50 dark:bg-yellow-950/30"
-  if (price < 40) return "bg-orange-50 dark:bg-orange-950/30"
+  if (price < 5) return "bg-green-50 dark:bg-green-950/30"
+  if (price < 10) return "bg-yellow-50 dark:bg-yellow-950/30"
+  if (price < 20) return "bg-orange-50 dark:bg-orange-950/30"
   return "bg-red-50 dark:bg-red-950/30"
 }
 
