@@ -27,6 +27,12 @@ export interface PriceColorThresholds {
   orangeMax: number
 }
 
+export interface PriceColorThresholds {
+  greenMax: number
+  yellowMax: number
+  orangeMax: number
+}
+
 export type Resolution = "hourly" | "15min"
 
 const CACHE_PREFIX = "nordpool_price_data"
