@@ -12,7 +12,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts"
-import type { PriceData, Resolution } from "./electricity-dashboard"
+import type { PriceColorThresholds, PriceData, Resolution } from "./electricity-dashboard"
 import { getDateInTimezone } from "@/lib/date-utils"
 
 interface PriceChartProps {
@@ -22,6 +22,7 @@ interface PriceChartProps {
   chargingWindow?: { startIndex: number; endIndex: number } | null
   timezone: string
   unitLabel: string
+  colorThresholds: PriceColorThresholds
 }
 
 const PRICE_COLORS = {
@@ -31,6 +32,14 @@ const PRICE_COLORS = {
   red: "#dc2626",
 } as const
 
+function resolveColor(price: number, thresholds: PriceColorThresholds): string {
+  if (price < thresholds.greenMax) {
+    return PRICE_COLORS.green
+  }
+  if (price < thresholds.yellowMax) {
+    return PRICE_COLORS.yellow
+  }
+  if (price < thresholds.orangeMax) {
 function getColorForPrice(price: number): string {
   if (price < 5) {
     return PRICE_COLORS.green
@@ -44,7 +53,21 @@ function getColorForPrice(price: number): string {
   return PRICE_COLORS.red
 }
 
-export function PriceChart({ data, currentTime, resolution, chargingWindow, timezone, unitLabel }: PriceChartProps) {
+export function PriceChart({
+  data,
+  currentTime,
+  resolution,
+  chargingWindow,
+  timezone,
+  unitLabel,
+  colorThresholds,
+}: PriceChartProps) {
+  const { greenMax, yellowMax, orangeMax } = colorThresholds
+
+  const getColorForPrice = useMemo(() => {
+    return (price: number) => resolveColor(price, colorThresholds)
+  }, [colorThresholds])
+
   const { chartData, avgPrice, currentTimeIndex } = useMemo(() => {
     const prices = data.map((item) => item.price)
     const avg = prices.reduce((sum, price) => sum + price, 0) / prices.length
@@ -147,7 +170,7 @@ export function PriceChart({ data, currentTime, resolution, chargingWindow, time
         }
         return null
       },
-    [unitLabel],
+    [getColorForPrice, unitLabel],
   )
 
   const tickInterval = useMemo(() => {
@@ -217,6 +240,9 @@ export function PriceChart({ data, currentTime, resolution, chargingWindow, time
     ]
 
     const thresholds = [
+      { value: orangeMax, color: PRICE_COLORS.orange },
+      { value: yellowMax, color: PRICE_COLORS.yellow },
+      { value: greenMax, color: PRICE_COLORS.green },
       { value: 20, color: PRICE_COLORS.orange },
       { value: 10, color: PRICE_COLORS.yellow },
       { value: 5, color: PRICE_COLORS.green },
@@ -246,6 +272,7 @@ export function PriceChart({ data, currentTime, resolution, chargingWindow, time
         opacity: Number(opacity.toFixed(2)),
       }
     })
+  }, [chartData, getColorForPrice, greenMax, orangeMax, yellowMax])
   }, [chartData])
 
   return (

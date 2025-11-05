@@ -21,6 +21,12 @@ export interface PriceData {
   price: number // cents/kWh (including VAT)
 }
 
+export interface PriceColorThresholds {
+  greenMax: number
+  yellowMax: number
+  orangeMax: number
+}
+
 export type Resolution = "hourly" | "15min"
 
 const CACHE_PREFIX = "nordpool_price_data"
@@ -349,6 +355,19 @@ export function ElectricityDashboard() {
     } catch {}
   }, [area])
 
+  const areaInfo = AREAS[area]
+
+  const colorThresholds = useMemo<PriceColorThresholds>(() => {
+    switch (areaInfo.currency) {
+      case "SEK":
+      case "NOK":
+        return { greenMax: 50, yellowMax: 100, orangeMax: 200 }
+      case "EUR":
+      default:
+        return { greenMax: 5, yellowMax: 10, orangeMax: 20 }
+    }
+  }, [areaInfo])
+
   const { data, error, isLoading, mutate } = useSWR<PriceData[]>(`/api/nordpool?area=${area}`, fetcher, {
     revalidateOnFocus: false,
     revalidateOnMount: true,
@@ -407,7 +426,7 @@ export function ElectricityDashboard() {
 
   const todayPrices = useMemo(() => {
     if (!processedData) return []
-    const tz = AREAS[area].timezone
+    const tz = areaInfo.timezone
     return processedData.filter((item) => isSameDayInTimezone(new Date(item.timestamp), currentTime, tz))
   }, [processedData, currentTime, area])
 
@@ -415,7 +434,7 @@ export function ElectricityDashboard() {
     if (!processedData) return []
     const tomorrow = new Date(currentTime)
     tomorrow.setDate(tomorrow.getDate() + 1)
-    const tz = AREAS[area].timezone
+    const tz = areaInfo.timezone
     return processedData.filter((item) => isSameDayInTimezone(new Date(item.timestamp), tomorrow, tz))
   }, [processedData, currentTime, area])
 
@@ -518,6 +537,9 @@ export function ElectricityDashboard() {
   return (
     <div className="min-h-screen p-4 md:p-8">
       <div className="mx-auto max-w-7xl space-y-6">
+        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <div className="md:flex-1">
+            <h1 className="flex flex-wrap items-center gap-3 text-3xl font-bold tracking-tight md:flex-nowrap md:whitespace-nowrap md:text-4xl">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <h1 className="flex flex-wrap items-center gap-3 text-3xl font-bold tracking-tight text-balance md:text-4xl">
@@ -603,16 +625,16 @@ export function ElectricityDashboard() {
             data={processedData}
             currentTime={currentTime}
             resolution={resolution}
-            timezone={AREAS[area].timezone}
-            unitLabel={AREAS[area].unitLabel}
+            timezone={areaInfo.timezone}
+            unitLabel={areaInfo.unitLabel}
           />
           <PriceStats
             todayData={todayPrices}
             tomorrowData={tomorrowPrices}
             resolution={resolution}
             currentTime={currentTime}
-            timezone={AREAS[area].timezone}
-            unitLabel={AREAS[area].unitLabel}
+            timezone={areaInfo.timezone}
+            unitLabel={areaInfo.unitLabel}
           />
         </div>
 
@@ -628,8 +650,9 @@ export function ElectricityDashboard() {
             currentTime={currentTime}
             resolution={resolution}
             chargingWindow={bestChargingWindow}
-            timezone={AREAS[area].timezone}
-            unitLabel={AREAS[area].unitLabel}
+            timezone={areaInfo.timezone}
+            unitLabel={areaInfo.unitLabel}
+            colorThresholds={colorThresholds}
           />
         </Card>
 
@@ -659,8 +682,9 @@ export function ElectricityDashboard() {
             <PriceList
               data={processedData}
               resolution={resolution}
-              timezone={AREAS[area].timezone}
-              unitLabel={AREAS[area].unitLabel}
+              timezone={areaInfo.timezone}
+              unitLabel={areaInfo.unitLabel}
+              colorThresholds={colorThresholds}
             />
           )}
         </Card>
@@ -671,8 +695,8 @@ export function ElectricityDashboard() {
           resolution={resolution}
           chargerPower={systemSettings.chargerPower}
           batterySize={systemSettings.batterySize}
-          timezone={AREAS[area].timezone}
-          currencySymbol={AREAS[area].currencySymbol}
+          timezone={areaInfo.timezone}
+          currencySymbol={areaInfo.currencySymbol}
         />
 
         <Card className="border-muted/50 bg-muted/20 p-6">
