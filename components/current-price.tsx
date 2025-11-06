@@ -3,85 +3,50 @@
 import { useMemo } from "react"
 import { Card } from "@/components/ui/card"
 import { TrendingDown, TrendingUp, Minus } from "lucide-react"
-import type { PriceData, Resolution } from "./electricity-dashboard"
-import { getDateInTimezone } from "@/lib/date-utils"
+import type { PriceData } from "./electricity-dashboard"
 import { useTranslation } from "@/lib/translations"
 
 interface CurrentPriceProps {
   data: PriceData[]
-  currentTime: Date
-  resolution: Resolution
-  timezone: string
   unitLabel: string
+  activeIndex: number
 }
 
-export function CurrentPrice({ data, currentTime, resolution, timezone, unitLabel }: CurrentPriceProps) {
+export function CurrentPrice({ data, unitLabel, activeIndex }: CurrentPriceProps) {
   const { t, language } = useTranslation()
 
   console.log("[v0] CurrentPrice - Current language:", language)
   console.log("[v0] CurrentPrice - Translated 'currentPrice':", t("currentPrice"))
 
   const { currentPrice, previousPrice } = useMemo(() => {
-    const localTime = getDateInTimezone(currentTime, timezone)
-
-    let current: PriceData | undefined
-    let previous: PriceData | undefined
-
-    if (resolution === "15min") {
-      const currentMinutes = Math.floor(localTime.minute / 15) * 15
-
-      current = data.find((item) => {
-        const itemTime = getDateInTimezone(new Date(item.timestamp), timezone)
-        return (
-          itemTime.year === localTime.year &&
-          itemTime.month === localTime.month &&
-          itemTime.day === localTime.day &&
-          itemTime.hour === localTime.hour &&
-          itemTime.minute === currentMinutes
-        )
-      })
-
-      const prevMinutes = currentMinutes - 15 < 0 ? 45 : currentMinutes - 15
-      const prevHour = currentMinutes - 15 < 0 ? (localTime.hour === 0 ? 23 : localTime.hour - 1) : localTime.hour
-
-      previous = data.find((item) => {
-        const itemTime = getDateInTimezone(new Date(item.timestamp), timezone)
-        return (
-          itemTime.year === localTime.year &&
-          itemTime.month === localTime.month &&
-          itemTime.day === localTime.day &&
-          itemTime.hour === prevHour &&
-          itemTime.minute === prevMinutes
-        )
-      })
-    } else {
-      const currentHour = localTime.hour
-      const previousHour = currentHour === 0 ? 23 : currentHour - 1
-
-      current = data.find((item) => {
-        const itemTime = getDateInTimezone(new Date(item.timestamp), timezone)
-        return (
-          itemTime.year === localTime.year &&
-          itemTime.month === localTime.month &&
-          itemTime.day === localTime.day &&
-          itemTime.hour === currentHour
-        )
-      })
-
-      previous = data.find((item) => {
-        const itemTime = getDateInTimezone(new Date(item.timestamp), timezone)
-        const prevDay = currentHour === 0 ? localTime.day - 1 : localTime.day
-        return (
-          itemTime.year === localTime.year &&
-          itemTime.month === localTime.month &&
-          itemTime.day === prevDay &&
-          itemTime.hour === previousHour
-        )
-      })
+    if (!data || data.length === 0) {
+      return { currentPrice: undefined, previousPrice: undefined }
     }
 
-    return { currentPrice: current, previousPrice: previous }
-  }, [data, currentTime, resolution, timezone])
+    const index = activeIndex >= 0 && activeIndex < data.length ? activeIndex : 0
+    const current = data[index]
+
+    if (!current) {
+      return { currentPrice: undefined, previousPrice: undefined }
+    }
+
+    if (index > 0) {
+      return { currentPrice: current, previousPrice: data[index - 1] }
+    }
+
+    const currentTimestamp = new Date(current.timestamp).getTime()
+    let fallbackPrevious: PriceData | undefined
+    for (let i = data.length - 1; i >= 0; i--) {
+      const candidate = data[i]
+      const candidateTime = new Date(candidate.timestamp).getTime()
+      if (candidateTime < currentTimestamp) {
+        fallbackPrevious = candidate
+        break
+      }
+    }
+
+    return { currentPrice: current, previousPrice: fallbackPrevious }
+  }, [data, activeIndex])
 
   const price = currentPrice?.price ?? 0
   const prevPrice = previousPrice?.price ?? price

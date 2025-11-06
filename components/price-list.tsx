@@ -1,14 +1,14 @@
 "use client"
 import type { PriceColorThresholds, PriceData } from "@/components/electricity-dashboard"
-import { getDateInTimezone } from "@/lib/date-utils"
 import { useTranslation } from "@/lib/translations"
 
 interface PriceListProps {
   data: PriceData[]
-  resolution: "hourly" | "15min"
   timezone: string
   unitLabel: string
   colorThresholds: PriceColorThresholds
+  currentTime: Date
+  activeIndex: number
 }
 
 function getPriceColor(price: number, thresholds: PriceColorThresholds): string {
@@ -25,29 +25,17 @@ function getPriceBgColor(price: number, thresholds: PriceColorThresholds): strin
   return "bg-red-50 dark:bg-red-950/30"
 }
 
-export function PriceList({ data, resolution, timezone, unitLabel, colorThresholds }: PriceListProps) {
+export function PriceList({
+  data,
+  timezone,
+  unitLabel,
+  colorThresholds,
+  currentTime,
+  activeIndex,
+}: PriceListProps) {
   const { t, language } = useTranslation()
-  const now = new Date()
-  const currentTimeInTz = getDateInTimezone(now, timezone)
-
-  const isCurrentTimeSlot = (itemDate: Date): boolean => {
-    const itemTimeInTz = getDateInTimezone(itemDate, timezone)
-
-    if (resolution === "hourly") {
-      // For hourly: match the hour
-      return itemTimeInTz.hour === currentTimeInTz.hour && itemTimeInTz.day === currentTimeInTz.day
-    } else {
-      // For 15-minute: match hour and round to nearest 15-minute interval
-      const currentMinutes = Math.floor(currentTimeInTz.minute / 15) * 15
-      const itemMinutes = itemTimeInTz.minute
-
-      return (
-        itemTimeInTz.hour === currentTimeInTz.hour &&
-        itemTimeInTz.day === currentTimeInTz.day &&
-        itemMinutes === currentMinutes
-      )
-    }
-  }
+  const now = currentTime
+  const activeSlotIndex = activeIndex >= 0 && activeIndex < data.length ? activeIndex : -1
 
   const locale = language === "fi" ? "fi-FI" : language === "sv" ? "sv-SE" : "en-US"
 
@@ -55,8 +43,8 @@ export function PriceList({ data, resolution, timezone, unitLabel, colorThreshol
     <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
       {data.map((item, index) => {
         const itemDate = new Date(item.timestamp)
-        const isCurrentOrPast = itemDate <= now
-        const isCurrent = isCurrentTimeSlot(itemDate)
+        const isCurrentOrPast = itemDate.getTime() <= now.getTime()
+        const isCurrent = index === activeSlotIndex
 
         const timeFormat = itemDate.toLocaleTimeString(locale, {
           hour: "2-digit",

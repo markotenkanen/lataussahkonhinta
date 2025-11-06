@@ -280,6 +280,40 @@ function expandTo15Min(data: PriceData[]): PriceData[] {
   return out.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
 }
 
+function getSlotDuration(resolution: Resolution) {
+  return resolution === "hourly" ? 60 * 60 * 1000 : 15 * 60 * 1000
+}
+
+function findActivePriceIndex(data: PriceData[], currentTime: Date, resolution: Resolution): number {
+  if (!data || data.length === 0) return -1
+
+  const now = currentTime.getTime()
+  const slotDuration = getSlotDuration(resolution)
+  let latestPastIndex = -1
+
+  for (let i = 0; i < data.length; i++) {
+    const start = new Date(data[i].timestamp).getTime()
+    if (Number.isNaN(start)) continue
+
+    const end = start + slotDuration
+    if (now >= start && now < end) {
+      return i
+    }
+
+    if (now >= start) {
+      latestPastIndex = i
+    } else if (latestPastIndex !== -1) {
+      break
+    }
+  }
+
+  if (latestPastIndex !== -1) {
+    return latestPastIndex
+  }
+
+  return 0
+}
+
 export function ElectricityDashboard() {
   const { language, setLanguage, t } = useTranslation()
 
@@ -426,6 +460,11 @@ export function ElectricityDashboard() {
     if (isFifteenMinCadence(data)) return data
     return expandTo15Min(aggregateToHourly(data))
   }, [data, resolution])
+
+  const activePriceIndex = useMemo(
+    () => findActivePriceIndex(processedData, currentTime, resolution),
+    [processedData, currentTime, resolution],
+  )
 
   const todayPrices = useMemo(() => {
     if (!processedData) return []
@@ -623,10 +662,8 @@ export function ElectricityDashboard() {
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
           <CurrentPrice
             data={processedData}
-            currentTime={currentTime}
-            resolution={resolution}
-            timezone={areaInfo.timezone}
             unitLabel={areaInfo.unitLabel}
+            activeIndex={activePriceIndex}
           />
           <PriceStats
             todayData={todayPrices}
@@ -647,12 +684,12 @@ export function ElectricityDashboard() {
           </h2>
           <PriceChart
             data={processedData}
-            currentTime={currentTime}
             resolution={resolution}
             chargingWindow={bestChargingWindow}
             timezone={areaInfo.timezone}
             unitLabel={areaInfo.unitLabel}
             colorThresholds={colorThresholds}
+            activeIndex={activePriceIndex}
           />
         </Card>
 
@@ -681,10 +718,11 @@ export function ElectricityDashboard() {
           {showPriceList && (
             <PriceList
               data={processedData}
-              resolution={resolution}
               timezone={areaInfo.timezone}
               unitLabel={areaInfo.unitLabel}
               colorThresholds={colorThresholds}
+              currentTime={currentTime}
+              activeIndex={activePriceIndex}
             />
           )}
         </Card>

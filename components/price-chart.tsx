@@ -13,16 +13,15 @@ import {
   YAxis,
 } from "recharts"
 import type { PriceColorThresholds, PriceData, Resolution } from "./electricity-dashboard"
-import { getDateInTimezone } from "@/lib/date-utils"
 
 interface PriceChartProps {
   data: PriceData[]
-  currentTime: Date
   resolution: Resolution
   chargingWindow?: { startIndex: number; endIndex: number } | null
   timezone: string
   unitLabel: string
   colorThresholds: PriceColorThresholds
+  activeIndex: number
 }
 
 const PRICE_COLORS = {
@@ -47,12 +46,12 @@ function resolveColor(price: number, thresholds: PriceColorThresholds): string {
 
 export function PriceChart({
   data,
-  currentTime,
   resolution,
   chargingWindow,
   timezone,
   unitLabel,
   colorThresholds,
+  activeIndex,
 }: PriceChartProps) {
   const { greenMax, yellowMax, orangeMax } = colorThresholds
 
@@ -60,7 +59,7 @@ export function PriceChart({
     return (price: number) => resolveColor(price, colorThresholds)
   }, [colorThresholds])
 
-  const { chartData, avgPrice, currentTimeIndex } = useMemo(() => {
+  const { chartData, avgPrice } = useMemo(() => {
     const prices = data.map((item) => item.price)
     const avg = prices.reduce((sum, price) => sum + price, 0) / prices.length
 
@@ -84,64 +83,8 @@ export function PriceChart({
       }
     })
 
-    const localCurrentTime = getDateInTimezone(currentTime, timezone)
-    const currentHour = localCurrentTime.hour
-    const currentMinute = localCurrentTime.minute
-    const currentDay = localCurrentTime.day
-
-    console.log("[v0] Chart - Current time (local tz):", {
-      year: localCurrentTime.year,
-      month: localCurrentTime.month,
-      day: currentDay,
-      hour: currentHour,
-      minute: currentMinute,
-    })
-
-    let currentIdx = -1
-    if (resolution === "15min") {
-      const roundedMinute = Math.floor(currentMinute / 15) * 15
-      console.log("[v0] Chart - Looking for 15min slot:", { hour: currentHour, minute: roundedMinute, day: currentDay })
-
-      currentIdx = formatted.findIndex((item) => {
-        const itemDate = getDateInTimezone(new Date(item.timestamp), timezone)
-        const matches =
-          itemDate.hour === currentHour && itemDate.minute === roundedMinute && itemDate.day === currentDay
-        if (itemDate.hour === currentHour && itemDate.minute === roundedMinute) {
-          console.log(
-            "[v0] Chart - Found matching time at index",
-            item.index,
-            "day:",
-            itemDate.day,
-            "matches:",
-            matches,
-          )
-        }
-        return matches
-      })
-    } else {
-      console.log("[v0] Chart - Looking for hourly slot:", { hour: currentHour, day: currentDay })
-
-      currentIdx = formatted.findIndex((item) => {
-        const itemDate = getDateInTimezone(new Date(item.timestamp), timezone)
-        const matches = itemDate.hour === currentHour && itemDate.day === currentDay
-        if (itemDate.hour === currentHour) {
-          console.log(
-            "[v0] Chart - Found matching hour at index",
-            item.index,
-            "day:",
-            itemDate.day,
-            "matches:",
-            matches,
-          )
-        }
-        return matches
-      })
-    }
-
-    console.log("[v0] Chart - Current time index:", currentIdx)
-
-    return { chartData: formatted, avgPrice: avg, currentTimeIndex: currentIdx }
-  }, [data, currentTime, resolution, timezone])
+    return { chartData: formatted, avgPrice: avg }
+  }, [data, timezone, getColorForPrice])
 
   const CustomTooltip = useMemo(
     () =>
@@ -312,7 +255,9 @@ export function PriceChart({
             fontWeight: 600,
           }}
         />
-        {currentTimeIndex >= 0 && <ReferenceLine x={currentTimeIndex} stroke="#3b82f6" strokeWidth={2} />}
+        {activeIndex >= 0 && activeIndex < chartData.length && (
+          <ReferenceLine x={activeIndex} stroke="#3b82f6" strokeWidth={2} />
+        )}
 
         {chargingWindow && (
           <ReferenceArea
