@@ -284,7 +284,7 @@ export function ElectricityDashboard() {
   const { language, setLanguage, t } = useTranslation()
 
   const [currentTime, setCurrentTime] = useState(new Date())
-  const [resolution, setResolution] = useState<Resolution>("hourly")
+  const [resolution, setResolution] = useState<Resolution>("15min")
   const [showPriceList, setShowPriceList] = useState(false)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [showRefreshSuccess, setShowRefreshSuccess] = useState(false)
@@ -571,20 +571,20 @@ export function ElectricityDashboard() {
             {/* Resolution buttons - second on mobile */}
             <div className="flex items-center gap-2 rounded-lg border bg-card p-1">
               <Button
-                variant={resolution === "hourly" ? "default" : "ghost"}
-                size="sm"
-                onClick={() => setResolution("hourly")}
-                className="h-8"
-              >
-                {t("hourly")}
-              </Button>
-              <Button
                 variant={resolution === "15min" ? "default" : "ghost"}
                 size="sm"
                 onClick={() => setResolution("15min")}
                 className="h-8"
               >
                 {t("fifteenMin")}
+              </Button>
+              <Button
+                variant={resolution === "hourly" ? "default" : "ghost"}
+                size="sm"
+                onClick={() => setResolution("hourly")}
+                className="h-8"
+              >
+                {t("hourly")}
               </Button>
             </div>
 
