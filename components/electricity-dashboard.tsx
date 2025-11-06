@@ -13,17 +13,24 @@ import { Zap, Activity, ChevronDown, ChevronUp, RefreshCw } from "lucide-react"
 import useSWR from "swr"
 import { isSameDayInTimezone } from "@/lib/date-utils"
 import { useTranslation } from "@/lib/translations"
+import { APP_VERSION } from "@/lib/version"
 import { AREAS, DEFAULT_AREA, AREA_OPTIONS, type AreaCode } from "@/lib/areas"
 
 export interface PriceData {
   timestamp: string
-  price: number // cents/kWh
+  price: number // cents/kWh (including area-specific VAT)
+}
+
+export interface PriceColorThresholds {
+  greenMax: number
+  yellowMax: number
+  orangeMax: number
 }
 
 export type Resolution = "hourly" | "15min"
 
 const CACHE_PREFIX = "nordpool_price_data"
-const CACHE_VERSION = 3
+const CACHE_VERSION = 5
 
 function cacheKeyFor(area: string) {
   return `${CACHE_PREFIX}:${area}`
@@ -162,9 +169,11 @@ function isCacheValid(cachedDate: string, fetchedAt?: string): boolean {
 const fetcher = async (url: string) => {
   // Derive area from the URL passed by useSWR
   let area = DEFAULT_AREA
+  let areaInfo = AREAS[DEFAULT_AREA]
   try {
     const u = new URL(url, typeof window !== "undefined" ? window.location.origin : "http://localhost")
     area = (u.searchParams.get("area") || DEFAULT_AREA) as AreaCode
+    areaInfo = AREAS[area] || AREAS[DEFAULT_AREA]
   } catch {}
 
   const cached = getCachedData(area)
@@ -197,9 +206,16 @@ const fetcher = async (url: string) => {
     throw new Error("Invalid data format: expected array")
   }
 
-  const validData = data.filter((item: any) => {
-    return item && typeof item.timestamp === "string" && typeof item.price === "number"
-  })
+  const vatMultiplier = 1 + ((areaInfo?.vatPercent ?? 0) / 100)
+
+  const validData = data
+    .filter((item: any) => {
+      return item && typeof item.timestamp === "string" && typeof item.price === "number"
+    })
+    .map((item: any) => ({
+      timestamp: item.timestamp,
+      price: Number((item.price * vatMultiplier).toFixed(4)),
+    }))
 
   setCachedData(area, validData)
 
@@ -264,11 +280,45 @@ function expandTo15Min(data: PriceData[]): PriceData[] {
   return out.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
 }
 
+function getSlotDuration(resolution: Resolution) {
+  return resolution === "hourly" ? 60 * 60 * 1000 : 15 * 60 * 1000
+}
+
+function findActivePriceIndex(data: PriceData[], currentTime: Date, resolution: Resolution): number {
+  if (!data || data.length === 0) return -1
+
+  const now = currentTime.getTime()
+  const slotDuration = getSlotDuration(resolution)
+  let latestPastIndex = -1
+
+  for (let i = 0; i < data.length; i++) {
+    const start = new Date(data[i].timestamp).getTime()
+    if (Number.isNaN(start)) continue
+
+    const end = start + slotDuration
+    if (now >= start && now < end) {
+      return i
+    }
+
+    if (now >= start) {
+      latestPastIndex = i
+    } else if (latestPastIndex !== -1) {
+      break
+    }
+  }
+
+  if (latestPastIndex !== -1) {
+    return latestPastIndex
+  }
+
+  return 0
+}
+
 export function ElectricityDashboard() {
   const { language, setLanguage, t } = useTranslation()
 
   const [currentTime, setCurrentTime] = useState(new Date())
-  const [resolution, setResolution] = useState<Resolution>("hourly")
+  const [resolution, setResolution] = useState<Resolution>("15min")
   const [showPriceList, setShowPriceList] = useState(false)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [showRefreshSuccess, setShowRefreshSuccess] = useState(false)
@@ -342,6 +392,19 @@ export function ElectricityDashboard() {
     } catch {}
   }, [area])
 
+  const areaInfo = AREAS[area]
+
+  const colorThresholds = useMemo<PriceColorThresholds>(() => {
+    switch (areaInfo.currency) {
+      case "SEK":
+      case "NOK":
+        return { greenMax: 50, yellowMax: 100, orangeMax: 200 }
+      case "EUR":
+      default:
+        return { greenMax: 5, yellowMax: 10, orangeMax: 20 }
+    }
+  }, [areaInfo])
+
   const { data, error, isLoading, mutate } = useSWR<PriceData[]>(`/api/nordpool?area=${area}`, fetcher, {
     revalidateOnFocus: false,
     revalidateOnMount: true,
@@ -398,9 +461,14 @@ export function ElectricityDashboard() {
     return expandTo15Min(aggregateToHourly(data))
   }, [data, resolution])
 
+  const activePriceIndex = useMemo(
+    () => findActivePriceIndex(processedData, currentTime, resolution),
+    [processedData, currentTime, resolution],
+  )
+
   const todayPrices = useMemo(() => {
     if (!processedData) return []
-    const tz = AREAS[area].timezone
+    const tz = areaInfo.timezone
     return processedData.filter((item) => isSameDayInTimezone(new Date(item.timestamp), currentTime, tz))
   }, [processedData, currentTime, area])
 
@@ -408,7 +476,7 @@ export function ElectricityDashboard() {
     if (!processedData) return []
     const tomorrow = new Date(currentTime)
     tomorrow.setDate(tomorrow.getDate() + 1)
-    const tz = AREAS[area].timezone
+    const tz = areaInfo.timezone
     return processedData.filter((item) => isSameDayInTimezone(new Date(item.timestamp), tomorrow, tz))
   }, [processedData, currentTime, area])
 
@@ -511,15 +579,16 @@ export function ElectricityDashboard() {
   return (
     <div className="min-h-screen p-4 md:p-8">
       <div className="mx-auto max-w-7xl space-y-6">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h1 className="flex items-center gap-3 text-3xl font-bold tracking-tight text-balance md:text-4xl">
+        <div className="flex flex-col gap-4">
+          <div className="md:flex-1">
+            <h1 className="flex flex-wrap items-center gap-3 text-3xl font-bold tracking-tight md:flex-nowrap md:whitespace-nowrap md:text-4xl">
               <Zap className="h-8 w-8 text-primary md:h-10 md:w-10" />
               {t("title")}
+              <span className="text-sm font-medium text-muted-foreground md:text-base">{APP_VERSION}</span>
             </h1>
             <p className="mt-2 text-muted-foreground">{t("subtitle")}</p>
           </div>
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:gap-4">
+          <div className="flex flex-col gap-3 md:flex-row md:flex-wrap md:items-center md:gap-4">
             {/* Language selector - first on mobile */}
             <LanguageSelector currentLanguage={language} onLanguageChange={setLanguage} />
 
@@ -541,20 +610,20 @@ export function ElectricityDashboard() {
             {/* Resolution buttons - second on mobile */}
             <div className="flex items-center gap-2 rounded-lg border bg-card p-1">
               <Button
-                variant={resolution === "hourly" ? "default" : "ghost"}
-                size="sm"
-                onClick={() => setResolution("hourly")}
-                className="h-8"
-              >
-                {t("hourly")}
-              </Button>
-              <Button
                 variant={resolution === "15min" ? "default" : "ghost"}
                 size="sm"
                 onClick={() => setResolution("15min")}
                 className="h-8"
               >
                 {t("fifteenMin")}
+              </Button>
+              <Button
+                variant={resolution === "hourly" ? "default" : "ghost"}
+                size="sm"
+                onClick={() => setResolution("hourly")}
+                className="h-8"
+              >
+                {t("hourly")}
               </Button>
             </div>
 
@@ -593,18 +662,16 @@ export function ElectricityDashboard() {
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
           <CurrentPrice
             data={processedData}
-            currentTime={currentTime}
-            resolution={resolution}
-            timezone={AREAS[area].timezone}
-            unitLabel={AREAS[area].unitLabel}
+            unitLabel={areaInfo.unitLabel}
+            activeIndex={activePriceIndex}
           />
           <PriceStats
             todayData={todayPrices}
             tomorrowData={tomorrowPrices}
             resolution={resolution}
             currentTime={currentTime}
-            timezone={AREAS[area].timezone}
-            unitLabel={AREAS[area].unitLabel}
+            timezone={areaInfo.timezone}
+            unitLabel={areaInfo.unitLabel}
           />
         </div>
 
@@ -617,11 +684,12 @@ export function ElectricityDashboard() {
           </h2>
           <PriceChart
             data={processedData}
-            currentTime={currentTime}
             resolution={resolution}
             chargingWindow={bestChargingWindow}
-            timezone={AREAS[area].timezone}
-            unitLabel={AREAS[area].unitLabel}
+            timezone={areaInfo.timezone}
+            unitLabel={areaInfo.unitLabel}
+            colorThresholds={colorThresholds}
+            activeIndex={activePriceIndex}
           />
         </Card>
 
@@ -650,9 +718,11 @@ export function ElectricityDashboard() {
           {showPriceList && (
             <PriceList
               data={processedData}
-              resolution={resolution}
-              timezone={AREAS[area].timezone}
-              unitLabel={AREAS[area].unitLabel}
+              timezone={areaInfo.timezone}
+              unitLabel={areaInfo.unitLabel}
+              colorThresholds={colorThresholds}
+              currentTime={currentTime}
+              activeIndex={activePriceIndex}
             />
           )}
         </Card>
@@ -663,8 +733,8 @@ export function ElectricityDashboard() {
           resolution={resolution}
           chargerPower={systemSettings.chargerPower}
           batterySize={systemSettings.batterySize}
-          timezone={AREAS[area].timezone}
-          currencySymbol={AREAS[area].currencySymbol}
+          timezone={areaInfo.timezone}
+          currencySymbol={areaInfo.currencySymbol}
         />
 
         <Card className="border-muted/50 bg-muted/20 p-6">
