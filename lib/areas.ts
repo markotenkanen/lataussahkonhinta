@@ -10,19 +10,20 @@ export interface AreaInfo {
   currency: "EUR" | "SEK" | "NOK"
   unitLabel: string // minor unit per kWh, e.g. c/kWh, öre/kWh, øre/kWh
   currencySymbol: string
+  vatPercent: number
 }
 
 export const AREAS: Record<AreaCode, AreaInfo> = {
-  FI:   { code: "FI",  country: "FI", timezone: "Europe/Helsinki", currency: "EUR", unitLabel: "c/kWh",  currencySymbol: "€" },
-  SE1:  { code: "SE1", country: "SE", timezone: "Europe/Stockholm", currency: "SEK", unitLabel: "öre/kWh", currencySymbol: "kr" },
-  SE2:  { code: "SE2", country: "SE", timezone: "Europe/Stockholm", currency: "SEK", unitLabel: "öre/kWh", currencySymbol: "kr" },
-  SE3:  { code: "SE3", country: "SE", timezone: "Europe/Stockholm", currency: "SEK", unitLabel: "öre/kWh", currencySymbol: "kr" },
-  SE4:  { code: "SE4", country: "SE", timezone: "Europe/Stockholm", currency: "SEK", unitLabel: "öre/kWh", currencySymbol: "kr" },
-  NO1:  { code: "NO1", country: "NO", timezone: "Europe/Oslo",      currency: "NOK", unitLabel: "øre/kWh", currencySymbol: "kr" },
-  NO2:  { code: "NO2", country: "NO", timezone: "Europe/Oslo",      currency: "NOK", unitLabel: "øre/kWh", currencySymbol: "kr" },
-  NO3:  { code: "NO3", country: "NO", timezone: "Europe/Oslo",      currency: "NOK", unitLabel: "øre/kWh", currencySymbol: "kr" },
-  NO4:  { code: "NO4", country: "NO", timezone: "Europe/Oslo",      currency: "NOK", unitLabel: "øre/kWh", currencySymbol: "kr" },
-  NO5:  { code: "NO5", country: "NO", timezone: "Europe/Oslo",      currency: "NOK", unitLabel: "øre/kWh", currencySymbol: "kr" },
+  FI:   { code: "FI",  country: "FI", timezone: "Europe/Helsinki", currency: "EUR", unitLabel: "c/kWh",  currencySymbol: "€", vatPercent: 25.5 },
+  SE1:  { code: "SE1", country: "SE", timezone: "Europe/Stockholm", currency: "SEK", unitLabel: "öre/kWh", currencySymbol: "kr", vatPercent: 25 },
+  SE2:  { code: "SE2", country: "SE", timezone: "Europe/Stockholm", currency: "SEK", unitLabel: "öre/kWh", currencySymbol: "kr", vatPercent: 25 },
+  SE3:  { code: "SE3", country: "SE", timezone: "Europe/Stockholm", currency: "SEK", unitLabel: "öre/kWh", currencySymbol: "kr", vatPercent: 25 },
+  SE4:  { code: "SE4", country: "SE", timezone: "Europe/Stockholm", currency: "SEK", unitLabel: "öre/kWh", currencySymbol: "kr", vatPercent: 25 },
+  NO1:  { code: "NO1", country: "NO", timezone: "Europe/Oslo",      currency: "NOK", unitLabel: "øre/kWh", currencySymbol: "kr", vatPercent: 25 },
+  NO2:  { code: "NO2", country: "NO", timezone: "Europe/Oslo",      currency: "NOK", unitLabel: "øre/kWh", currencySymbol: "kr", vatPercent: 25 },
+  NO3:  { code: "NO3", country: "NO", timezone: "Europe/Oslo",      currency: "NOK", unitLabel: "øre/kWh", currencySymbol: "kr", vatPercent: 25 },
+  NO4:  { code: "NO4", country: "NO", timezone: "Europe/Oslo",      currency: "NOK", unitLabel: "øre/kWh", currencySymbol: "kr", vatPercent: 25 },
+  NO5:  { code: "NO5", country: "NO", timezone: "Europe/Oslo",      currency: "NOK", unitLabel: "øre/kWh", currencySymbol: "kr", vatPercent: 25 },
 }
 
 export const DEFAULT_AREA: AreaCode = "FI"
