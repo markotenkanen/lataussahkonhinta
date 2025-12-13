@@ -59,6 +59,12 @@ export const translations = {
     scheduleChargingTip: "Ajoita lataus suositellulle aikavälille (sininen alue kuvaajassa) maksimoidaksesi säästöt",
     updateAvailable: "Uusi versio saatavilla",
     reload: "Lataa uudelleen",
+    viewApiData: "Näytä API-data",
+    apiDataTitle: "Valitun alueen API-data",
+    apiDataDescription: "Alla näet ladatun hintadatan nykyiselle hinta-alueelle.",
+    apiDataUnavailable: "Hintadataa ei ole vielä ladattu tälle alueelle.",
+    selectedArea: "Valittu alue",
+    apiDataUrl: "API-osoite",
   },
   sv: {
     title: "Elspotpriser för Finland, Sverige och Norge",
@@ -115,6 +121,12 @@ export const translations = {
       "Schemalägg laddningen till den rekommenderade tidsperioden (blått område i diagrammet) för att maximera besparingarna",
     updateAvailable: "Ny version tillgänglig",
     reload: "Ladda om",
+    viewApiData: "Visa API-data",
+    apiDataTitle: "API-data för vald prisområde",
+    apiDataDescription: "Här visas den laddade prisdatan för det valda området.",
+    apiDataUnavailable: "Ingen prisdata har laddats ännu för detta område.",
+    selectedArea: "Valt område",
+    apiDataUrl: "API-adress",
   },
   en: {
     title: "Nord Pool electricity prices for Finland, Sweden and Norway",
@@ -170,6 +182,12 @@ export const translations = {
     scheduleChargingTip: "Schedule charging for the recommended time window (blue area in chart) to maximize savings",
     updateAvailable: "New version available",
     reload: "Reload",
+    viewApiData: "View API data",
+    apiDataTitle: "API data for selected area",
+    apiDataDescription: "Below is the loaded price data for the current area.",
+    apiDataUnavailable: "No price data has been loaded for this area yet.",
+    selectedArea: "Selected area",
+    apiDataUrl: "API URL",
   },
 }
 
