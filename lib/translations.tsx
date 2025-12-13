@@ -64,6 +64,7 @@ export const translations = {
     apiDataDescription: "Alla näet ladatun hintadatan nykyiselle hinta-alueelle.",
     apiDataUnavailable: "Hintadataa ei ole vielä ladattu tälle alueelle.",
     selectedArea: "Valittu alue",
+    apiDataUrl: "API-osoite",
   },
   sv: {
     title: "Elspotpriser för Finland, Sverige och Norge",
@@ -125,6 +126,7 @@ export const translations = {
     apiDataDescription: "Här visas den laddade prisdatan för det valda området.",
     apiDataUnavailable: "Ingen prisdata har laddats ännu för detta område.",
     selectedArea: "Valt område",
+    apiDataUrl: "API-adress",
   },
   en: {
     title: "Nord Pool electricity prices for Finland, Sweden and Norway",
@@ -185,6 +187,7 @@ export const translations = {
     apiDataDescription: "Below is the loaded price data for the current area.",
     apiDataUnavailable: "No price data has been loaded for this area yet.",
     selectedArea: "Selected area",
+    apiDataUrl: "API URL",
   },
 }
 

@@ -408,6 +408,15 @@ export function ElectricityDashboard() {
     [area],
   )
 
+  const apiEndpoint = useMemo(() => {
+    if (typeof window === "undefined") return `/api/nordpool?area=${area}`
+    try {
+      return new URL(`/api/nordpool?area=${area}`, window.location.origin).toString()
+    } catch {
+      return `/api/nordpool?area=${area}`
+    }
+  }, [area])
+
   const colorThresholds = useMemo<PriceColorThresholds>(() => {
     switch (areaInfo.currency) {
       case "SEK":
@@ -849,6 +858,17 @@ export function ElectricityDashboard() {
               <div className="space-y-3 text-sm">
                 <p className="text-muted-foreground">
                   {t("selectedArea")}: <span className="font-medium text-foreground">{selectedAreaLabel}</span>
+                </p>
+                <p className="break-words text-muted-foreground">
+                  {t("apiDataUrl")}: {" "}
+                  <a
+                    href={apiEndpoint}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-mono text-xs text-primary underline"
+                  >
+                    {apiEndpoint}
+                  </a>
                 </p>
                 <div className="overflow-hidden rounded-md border bg-muted/30">
                   <ScrollArea className="h-[60vh] w-full p-4">
