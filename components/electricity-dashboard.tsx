@@ -323,6 +323,13 @@ function findActivePriceIndex(data: PriceData[], currentTime: Date, resolution: 
   return 0
 }
 
+type SystemSettings = {
+  connectionPower: number
+  chargerPower: number
+  batterySize: number
+  targetChargePercent: number
+}
+
 export function ElectricityDashboard() {
   const { language, setLanguage, t } = useTranslation()
 
@@ -343,29 +350,29 @@ export function ElectricityDashboard() {
     return DEFAULT_AREA
   })
 
-  const [systemSettings, setSystemSettings] = useState(() => {
+  const defaultSystemSettings: SystemSettings = {
+    connectionPower: 17,
+    chargerPower: 11,
+    batterySize: 75,
+    targetChargePercent: 80,
+  }
+
+  const [systemSettings, setSystemSettings] = useState<SystemSettings>(() => {
     if (typeof window === "undefined") {
-      return {
-        connectionPower: 17,
-        chargerPower: 11,
-        batterySize: 75,
-      }
+      return defaultSystemSettings
     }
 
     try {
       const saved = localStorage.getItem("system_settings")
       if (saved) {
-        return JSON.parse(saved)
+        const parsed = JSON.parse(saved)
+        return { ...defaultSystemSettings, ...parsed }
       }
     } catch (error) {
       console.error("Failed to load system settings:", error)
     }
 
-    return {
-      connectionPower: 17,
-      chargerPower: 11,
-      batterySize: 75,
-    }
+    return defaultSystemSettings
   })
 
   const [isEditingSettings, setIsEditingSettings] = useState(false)
@@ -513,7 +520,13 @@ export function ElectricityDashboard() {
   const bestChargingWindow = useMemo(() => {
     if (futurePrices.length === 0) return null
 
-    const windowSize = resolution === "hourly" ? 4 : 16
+    const targetEnergyKWh = (systemSettings.batterySize * systemSettings.targetChargePercent) / 100
+    const requiredHours = targetEnergyKWh / Math.max(systemSettings.chargerPower, 0.1)
+    const slotHours = resolution === "hourly" ? 1 : 0.25
+    const windowSize = Math.max(1, Math.ceil(requiredHours / slotHours))
+
+    if (futurePrices.length < windowSize) return null
+
     let bestWindowData = { startIndex: 0, avgPrice: Number.POSITIVE_INFINITY }
 
     for (let i = 0; i <= futurePrices.length - windowSize; i++) {
@@ -533,7 +546,7 @@ export function ElectricityDashboard() {
     if (startIndex === -1 || endIndex === -1) return null
 
     return { startIndex, endIndex }
-  }, [futurePrices, processedData, resolution])
+  }, [futurePrices, processedData, resolution, systemSettings.batterySize, systemSettings.chargerPower, systemSettings.targetChargePercent])
 
   const handleRefreshData = async () => {
     setIsRefreshing(true)
@@ -757,6 +770,7 @@ export function ElectricityDashboard() {
           resolution={resolution}
           chargerPower={systemSettings.chargerPower}
           batterySize={systemSettings.batterySize}
+          targetChargePercent={systemSettings.targetChargePercent}
           timezone={areaInfo.timezone}
           currencySymbol={areaInfo.currencySymbol}
         />
@@ -778,7 +792,7 @@ export function ElectricityDashboard() {
             </div>
 
             {isEditingSettings ? (
-              <div className="grid gap-4 md:grid-cols-3">
+              <div className="grid gap-4 md:grid-cols-4">
                 <div>
                   <label className="mb-1 block text-sm text-muted-foreground">{t("chargerMax")} (kW)</label>
                   <input
@@ -827,9 +841,26 @@ export function ElectricityDashboard() {
                     step="1"
                   />
                 </div>
+                <div>
+                  <label className="mb-1 block text-sm text-muted-foreground">{t("chargePortion")} (%)</label>
+                  <input
+                    type="number"
+                    value={systemSettings.targetChargePercent}
+                    onChange={(e) =>
+                      setSystemSettings({
+                        ...systemSettings,
+                        targetChargePercent: Math.min(100, Math.max(1, Number(e.target.value))),
+                      })
+                    }
+                    className="w-full rounded-md border bg-background px-3 py-2 font-mono text-sm"
+                    min="1"
+                    max="100"
+                    step="1"
+                  />
+                </div>
               </div>
             ) : (
-              <div className="grid gap-3 text-sm md:grid-cols-3">
+              <div className="grid gap-3 text-sm md:grid-cols-4">
                 <div>
                   <p className="text-muted-foreground">{t("chargerMax")}</p>
                   <p className="font-mono font-medium">{systemSettings.chargerPower} kW</p>
@@ -841,6 +872,10 @@ export function ElectricityDashboard() {
                 <div>
                   <p className="text-muted-foreground">{t("connection")}</p>
                   <p className="font-mono font-medium">{systemSettings.connectionPower} kW</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">{t("chargePortion")}</p>
+                  <p className="font-mono font-medium">{systemSettings.targetChargePercent}%</p>
                 </div>
               </div>
             )}
