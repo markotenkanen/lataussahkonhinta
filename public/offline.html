@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="fi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sähköhintaseuranta – offline</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+      }
+      body {
+        margin: 0;
+        font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+        display: grid;
+        place-items: center;
+        min-height: 100vh;
+        background: #0a0a0a;
+        color: #f4f4f4;
+        padding: 2rem;
+        text-align: center;
+      }
+      .card {
+        max-width: 480px;
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 16px;
+        padding: 24px 20px;
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+      }
+      h1 {
+        font-size: 1.4rem;
+        margin: 0 0 0.5rem;
+      }
+      p {
+        margin: 0;
+        line-height: 1.5;
+      }
+      .muted {
+        opacity: 0.8;
+        font-size: 0.95rem;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h1>Ei verkkoyhteyttä</h1>
+      <p>Yhdistä verkkoon ja yritä uudelleen, jotta hinnat latautuvat.</p>
+      <p class="muted">Sovellus toimii taas automaattisesti, kun yhteys palaa.</p>
+    </div>
+  </body>
+</html>
