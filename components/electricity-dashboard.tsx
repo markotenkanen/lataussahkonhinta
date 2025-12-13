@@ -804,7 +804,7 @@ export function ElectricityDashboard() {
                         chargerPower: Number(e.target.value),
                       })
                     }
-                    className="w-full rounded-md border bg-background px-3 py-2 font-mono text-sm"
+                    className="w-full rounded-md border bg-background px-3 py-2 font-mono text-sm appearance-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                     min="1"
                     step="0.1"
                   />
@@ -820,7 +820,7 @@ export function ElectricityDashboard() {
                         batterySize: Number(e.target.value),
                       })
                     }
-                    className="w-full rounded-md border bg-background px-3 py-2 font-mono text-sm"
+                    className="w-full rounded-md border bg-background px-3 py-2 font-mono text-sm appearance-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                     min="1"
                     step="1"
                   />
@@ -836,7 +836,7 @@ export function ElectricityDashboard() {
                         connectionPower: Number(e.target.value),
                       })
                     }
-                    className="w-full rounded-md border bg-background px-3 py-2 font-mono text-sm"
+                    className="w-full rounded-md border bg-background px-3 py-2 font-mono text-sm appearance-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                     min="1"
                     step="1"
                   />
@@ -852,7 +852,7 @@ export function ElectricityDashboard() {
                         targetChargePercent: Math.min(100, Math.max(1, Number(e.target.value))),
                       })
                     }
-                    className="w-full rounded-md border bg-background px-3 py-2 font-mono text-sm"
+                    className="w-full rounded-md border bg-background px-3 py-2 font-mono text-sm appearance-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                     min="1"
                     max="100"
                     step="1"
