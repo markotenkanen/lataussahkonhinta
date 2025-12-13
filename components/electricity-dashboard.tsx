@@ -409,13 +409,9 @@ export function ElectricityDashboard() {
   )
 
   const apiEndpoint = useMemo(() => {
-    if (typeof window === "undefined") return `/api/nordpool?area=${area}`
-    try {
-      return new URL(`/api/nordpool?area=${area}`, window.location.origin).toString()
-    } catch {
-      return `/api/nordpool?area=${area}`
-    }
-  }, [area])
+    const code = encodeURIComponent(areaInfo.code)
+    return `https://mainnet.srcful.dev/price/electricity/${code}`
+  }, [areaInfo.code])
 
   const colorThresholds = useMemo<PriceColorThresholds>(() => {
     switch (areaInfo.currency) {
