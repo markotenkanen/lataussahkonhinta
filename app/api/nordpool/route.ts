@@ -61,7 +61,7 @@ export async function GET(request: Request) {
       .filter((it) => typeof it?.datetime === "string" && typeof it?.price === "number")
       .map((it) => {
         const eurPerMwh = it.price as number
-        const localMinorPerEur = minorPerEur[areaInfo.currency]
+        const localMinorPerEur = minorPerEur[areaInfo.currency] ?? minorPerEur.EUR
         const value = (eurPerMwh * localMinorPerEur) / 1000
         return {
           timestamp: it.datetime, // UTC ISO from provider

@@ -15,7 +15,8 @@ interface ChargingRecommendationProps {
   batterySize: number
   targetChargePercent: number
   timezone: string
-  currencySymbol: string
+  currencyCode: string
+  unitLabel: string
 }
 
 export function ChargingRecommendation({
@@ -26,7 +27,8 @@ export function ChargingRecommendation({
   batterySize,
   targetChargePercent,
   timezone,
-  currencySymbol,
+  currencyCode,
+  unitLabel,
 }: ChargingRecommendationProps) {
   const { t, language } = useTranslation()
 
@@ -179,7 +181,7 @@ export function ChargingRecommendation({
             </div>
             <div>
               <p className="text-sm text-muted-foreground">{t("averageToday")}</p>
-              <p className="font-mono text-lg font-semibold">{bestWindow.avgPrice.toFixed(2)} c/kWh</p>
+              <p className="font-mono text-lg font-semibold">{bestWindow.avgPrice.toFixed(2)} {unitLabel}</p>
             </div>
           </div>
         </div>
@@ -206,7 +208,7 @@ export function ChargingRecommendation({
               <p className="text-sm text-muted-foreground">
                 {t("estimatedCost")} ({requiredEnergyKWh.toFixed(1)}kWh)
               </p>
-              <p className="font-mono text-lg font-semibold">{currencySymbol}{chargeCost.toFixed(2)}</p>
+              <p className="font-mono text-lg font-semibold">{currencyCode} {chargeCost.toFixed(2)}</p>
             </div>
           </div>
         </div>

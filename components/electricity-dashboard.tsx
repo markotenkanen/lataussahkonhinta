@@ -772,7 +772,8 @@ export function ElectricityDashboard() {
           batterySize={systemSettings.batterySize}
           targetChargePercent={systemSettings.targetChargePercent}
           timezone={areaInfo.timezone}
-          currencySymbol={areaInfo.currencySymbol}
+          currencyCode={areaInfo.currency}
+          unitLabel={areaInfo.unitLabel}
         />
 
         <Card className="border-muted/50 bg-muted/20 p-6">
