@@ -15,6 +15,15 @@ import { isSameDayInTimezone } from "@/lib/date-utils"
 import { useTranslation } from "@/lib/translations"
 import { APP_VERSION } from "@/lib/version"
 import { AREAS, DEFAULT_AREA, AREA_OPTIONS, type AreaCode } from "@/lib/areas"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import { ScrollArea } from "@/components/ui/scroll-area"
 
 export interface PriceData {
   timestamp: string
@@ -314,6 +323,13 @@ function findActivePriceIndex(data: PriceData[], currentTime: Date, resolution: 
   return 0
 }
 
+type SystemSettings = {
+  connectionPower: number
+  chargerPower: number
+  batterySize: number
+  targetChargePercent: number
+}
+
 export function ElectricityDashboard() {
   const { language, setLanguage, t } = useTranslation()
 
@@ -323,6 +339,7 @@ export function ElectricityDashboard() {
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [showRefreshSuccess, setShowRefreshSuccess] = useState(false)
   const [lastRefreshTime, setLastRefreshTime] = useState<Date | null>(null)
+  const [isApiDataOpen, setIsApiDataOpen] = useState(false)
 
   const [area, setArea] = useState<AreaCode>(() => {
     if (typeof window === "undefined") return DEFAULT_AREA
@@ -333,29 +350,29 @@ export function ElectricityDashboard() {
     return DEFAULT_AREA
   })
 
-  const [systemSettings, setSystemSettings] = useState(() => {
+  const defaultSystemSettings: SystemSettings = {
+    connectionPower: 17,
+    chargerPower: 11,
+    batterySize: 75,
+    targetChargePercent: 80,
+  }
+
+  const [systemSettings, setSystemSettings] = useState<SystemSettings>(() => {
     if (typeof window === "undefined") {
-      return {
-        connectionPower: 17,
-        chargerPower: 11,
-        batterySize: 75,
-      }
+      return defaultSystemSettings
     }
 
     try {
       const saved = localStorage.getItem("system_settings")
       if (saved) {
-        return JSON.parse(saved)
+        const parsed = JSON.parse(saved)
+        return { ...defaultSystemSettings, ...parsed }
       }
     } catch (error) {
       console.error("Failed to load system settings:", error)
     }
 
-    return {
-      connectionPower: 17,
-      chargerPower: 11,
-      batterySize: 75,
-    }
+    return defaultSystemSettings
   })
 
   const [isEditingSettings, setIsEditingSettings] = useState(false)
@@ -393,6 +410,15 @@ export function ElectricityDashboard() {
   }, [area])
 
   const areaInfo = AREAS[area]
+  const selectedAreaLabel = useMemo(
+    () => AREA_OPTIONS.find((option) => option.value === area)?.label ?? area,
+    [area],
+  )
+
+  const apiEndpoint = useMemo(() => {
+    const code = encodeURIComponent(areaInfo.code)
+    return `https://mainnet.srcful.dev/price/electricity/${code}`
+  }, [areaInfo.code])
 
   const colorThresholds = useMemo<PriceColorThresholds>(() => {
     switch (areaInfo.currency) {
@@ -486,10 +512,21 @@ export function ElectricityDashboard() {
     return processedData.filter((item) => new Date(item.timestamp).getTime() >= now)
   }, [processedData, currentTime])
 
+  const apiDataJson = useMemo(() => {
+    if (!data) return null
+    return JSON.stringify(data, null, 2)
+  }, [data])
+
   const bestChargingWindow = useMemo(() => {
     if (futurePrices.length === 0) return null
 
-    const windowSize = resolution === "hourly" ? 4 : 16
+    const targetEnergyKWh = (systemSettings.batterySize * systemSettings.targetChargePercent) / 100
+    const requiredHours = targetEnergyKWh / Math.max(systemSettings.chargerPower, 0.1)
+    const slotHours = resolution === "hourly" ? 1 : 0.25
+    const windowSize = Math.max(1, Math.ceil(requiredHours / slotHours))
+
+    if (futurePrices.length < windowSize) return null
+
     let bestWindowData = { startIndex: 0, avgPrice: Number.POSITIVE_INFINITY }
 
     for (let i = 0; i <= futurePrices.length - windowSize; i++) {
@@ -509,7 +546,7 @@ export function ElectricityDashboard() {
     if (startIndex === -1 || endIndex === -1) return null
 
     return { startIndex, endIndex }
-  }, [futurePrices, processedData, resolution])
+  }, [futurePrices, processedData, resolution, systemSettings.batterySize, systemSettings.chargerPower, systemSettings.targetChargePercent])
 
   const handleRefreshData = async () => {
     setIsRefreshing(true)
@@ -733,85 +770,153 @@ export function ElectricityDashboard() {
           resolution={resolution}
           chargerPower={systemSettings.chargerPower}
           batterySize={systemSettings.batterySize}
+          targetChargePercent={systemSettings.targetChargePercent}
           timezone={areaInfo.timezone}
           currencySymbol={areaInfo.currencySymbol}
         />
 
         <Card className="border-muted/50 bg-muted/20 p-6">
-          <div className="mb-3 flex items-center justify-between">
-            <h3 className="font-semibold">{t("systemInfo")}</h3>
-            <Button variant="outline" size="sm" onClick={() => setIsEditingSettings(!isEditingSettings)}>
-              {isEditingSettings ? t("save") : t("edit")}
-            </Button>
-          </div>
+          <Dialog open={isApiDataOpen} onOpenChange={setIsApiDataOpen}>
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <h3 className="font-semibold">{t("systemInfo")}</h3>
+              <div className="flex flex-wrap items-center gap-2">
+                <DialogTrigger asChild>
+                  <Button variant="outline" size="sm" onClick={() => setIsApiDataOpen(true)}>
+                    {t("viewApiData")}
+                  </Button>
+                </DialogTrigger>
+                <Button variant="outline" size="sm" onClick={() => setIsEditingSettings(!isEditingSettings)}>
+                  {isEditingSettings ? t("save") : t("edit")}
+                </Button>
+              </div>
+            </div>
 
-          {isEditingSettings ? (
-            <div className="grid gap-4 md:grid-cols-3">
-              <div>
-                <label className="mb-1 block text-sm text-muted-foreground">{t("chargerMax")} (kW)</label>
-                <input
-                  type="number"
-                  value={systemSettings.chargerPower}
-                  onChange={(e) =>
-                    setSystemSettings({
-                      ...systemSettings,
-                      chargerPower: Number(e.target.value),
-                    })
-                  }
-                  className="w-full rounded-md border bg-background px-3 py-2 font-mono text-sm"
-                  min="1"
-                  step="0.1"
-                />
+            {isEditingSettings ? (
+              <div className="grid gap-4 md:grid-cols-4">
+                <div>
+                  <label className="mb-1 block text-sm text-muted-foreground">{t("chargerMax")} (kW)</label>
+                  <input
+                    type="number"
+                    value={systemSettings.chargerPower}
+                    onChange={(e) =>
+                      setSystemSettings({
+                        ...systemSettings,
+                        chargerPower: Number(e.target.value),
+                      })
+                    }
+                    className="w-full rounded-md border bg-background px-3 py-2 font-mono text-sm appearance-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                    min="1"
+                    step="0.1"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm text-muted-foreground">{t("batterySize")} (kWh)</label>
+                  <input
+                    type="number"
+                    value={systemSettings.batterySize}
+                    onChange={(e) =>
+                      setSystemSettings({
+                        ...systemSettings,
+                        batterySize: Number(e.target.value),
+                      })
+                    }
+                    className="w-full rounded-md border bg-background px-3 py-2 font-mono text-sm appearance-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                    min="1"
+                    step="1"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm text-muted-foreground">{t("connection")} (kW)</label>
+                  <input
+                    type="number"
+                    value={systemSettings.connectionPower}
+                    onChange={(e) =>
+                      setSystemSettings({
+                        ...systemSettings,
+                        connectionPower: Number(e.target.value),
+                      })
+                    }
+                    className="w-full rounded-md border bg-background px-3 py-2 font-mono text-sm appearance-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                    min="1"
+                    step="1"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm text-muted-foreground">{t("chargePortion")} (%)</label>
+                  <input
+                    type="number"
+                    value={systemSettings.targetChargePercent}
+                    onChange={(e) =>
+                      setSystemSettings({
+                        ...systemSettings,
+                        targetChargePercent: Math.min(100, Math.max(1, Number(e.target.value))),
+                      })
+                    }
+                    className="w-full rounded-md border bg-background px-3 py-2 font-mono text-sm appearance-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                    min="1"
+                    max="100"
+                    step="1"
+                  />
+                </div>
               </div>
-              <div>
-                <label className="mb-1 block text-sm text-muted-foreground">{t("batterySize")} (kWh)</label>
-                <input
-                  type="number"
-                  value={systemSettings.batterySize}
-                  onChange={(e) =>
-                    setSystemSettings({
-                      ...systemSettings,
-                      batterySize: Number(e.target.value),
-                    })
-                  }
-                  className="w-full rounded-md border bg-background px-3 py-2 font-mono text-sm"
-                  min="1"
-                  step="1"
-                />
+            ) : (
+              <div className="grid gap-3 text-sm md:grid-cols-4">
+                <div>
+                  <p className="text-muted-foreground">{t("chargerMax")}</p>
+                  <p className="font-mono font-medium">{systemSettings.chargerPower} kW</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">{t("batterySize")}</p>
+                  <p className="font-mono font-medium">{systemSettings.batterySize} kWh</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">{t("connection")}</p>
+                  <p className="font-mono font-medium">{systemSettings.connectionPower} kW</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">{t("chargePortion")}</p>
+                  <p className="font-mono font-medium">{systemSettings.targetChargePercent}%</p>
+                </div>
               </div>
-              <div>
-                <label className="mb-1 block text-sm text-muted-foreground">{t("connection")} (kW)</label>
-                <input
-                  type="number"
-                  value={systemSettings.connectionPower}
-                  onChange={(e) =>
-                    setSystemSettings({
-                      ...systemSettings,
-                      connectionPower: Number(e.target.value),
-                    })
-                  }
-                  className="w-full rounded-md border bg-background px-3 py-2 font-mono text-sm"
-                  min="1"
-                  step="1"
-                />
+            )}
+
+            <DialogContent className="max-w-3xl">
+              <DialogHeader>
+                <DialogTitle>{t("apiDataTitle")}</DialogTitle>
+                <DialogDescription>{t("apiDataDescription")}</DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-3 text-sm">
+                <p className="text-muted-foreground">
+                  {t("selectedArea")}: <span className="font-medium text-foreground">{selectedAreaLabel}</span>
+                </p>
+                <p className="break-words text-muted-foreground">
+                  {t("apiDataUrl")}: {" "}
+                  <a
+                    href={apiEndpoint}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-mono text-xs text-primary underline"
+                  >
+                    {apiEndpoint}
+                  </a>
+                </p>
+                <div className="overflow-hidden rounded-md border bg-muted/30">
+                  <ScrollArea className="h-[60vh] w-full p-4">
+                    {isLoading ? (
+                      <p className="text-muted-foreground">{t("loadingPrices")}</p>
+                    ) : error ? (
+                      <p className="text-destructive">{t("loadingFailed")}</p>
+                    ) : apiDataJson ? (
+                      <pre className="whitespace-pre-wrap font-mono text-[11px] leading-5">{apiDataJson}</pre>
+                    ) : (
+                      <p className="text-muted-foreground">{t("apiDataUnavailable")}</p>
+                    )}
+                  </ScrollArea>
+                </div>
               </div>
-            </div>
-          ) : (
-            <div className="grid gap-3 text-sm md:grid-cols-3">
-              <div>
-                <p className="text-muted-foreground">{t("chargerMax")}</p>
-                <p className="font-mono font-medium">{systemSettings.chargerPower} kW</p>
-              </div>
-              <div>
-                <p className="text-muted-foreground">{t("batterySize")}</p>
-                <p className="font-mono font-medium">{systemSettings.batterySize} kWh</p>
-              </div>
-              <div>
-                <p className="text-muted-foreground">{t("connection")}</p>
-                <p className="font-mono font-medium">{systemSettings.connectionPower} kW</p>
-              </div>
-            </div>
-          )}
+            </DialogContent>
+          </Dialog>
         </Card>
       </div>
     </div>
