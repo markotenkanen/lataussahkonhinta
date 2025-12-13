@@ -2,7 +2,7 @@
 
 import { useMemo } from "react"
 import { Card } from "@/components/ui/card"
-import { Battery, Clock, Euro, Zap, TrendingDown } from "lucide-react"
+import { Battery, Clock, Euro, Timer, Zap, TrendingDown } from "lucide-react"
 import type { PriceData, Resolution } from "./electricity-dashboard"
 import { formatTimeInTimezone, isSameDayInTimezone } from "@/lib/date-utils"
 import { useTranslation } from "@/lib/translations"
@@ -161,6 +161,18 @@ export function ChargingRecommendation({
       <div className="grid gap-6 md:grid-cols-2">
         {/* Best Charging Window */}
         <div className="space-y-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-muted/50">
+              <Timer className="h-6 w-6 text-muted-foreground" />
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">{t("chargingDuration")}</p>
+              <p className="font-mono text-lg font-semibold">
+                {chargingHours.toFixed(1)} {t("hours")}
+              </p>
+            </div>
+          </div>
+
           <div className="flex items-center gap-3">
             <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
               <Clock className="h-6 w-6 text-primary" />
