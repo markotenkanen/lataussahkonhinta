@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="fi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Yhteyttä ei saada</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+        background: #0a0a0a;
+        color: #f4f4f5;
+        padding: 24px;
+        text-align: center;
+      }
+      main {
+        max-width: 480px;
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 16px;
+        padding: 24px 20px;
+      }
+      h1 {
+        margin: 0 0 12px;
+        font-size: 1.4rem;
+      }
+      p {
+        margin: 0 0 16px;
+        line-height: 1.5;
+      }
+      .actions {
+        display: flex;
+        gap: 12px;
+        justify-content: center;
+      }
+      button, a {
+        cursor: pointer;
+        border: none;
+        border-radius: 999px;
+        padding: 10px 16px;
+        font-weight: 600;
+        font-size: 1rem;
+        text-decoration: none;
+      }
+      .primary {
+        background: #3b82f6;
+        color: white;
+      }
+      .secondary {
+        background: transparent;
+        color: inherit;
+        border: 1px solid currentColor;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Ei yhteyttä verkkoon</h1>
+      <p>
+        Sovellus ei saanut yhteyttä palvelimeen. Tarkista verkkoyhteys ja
+        yritä uudelleen.
+      </p>
+      <div class="actions">
+        <button class="primary" onclick="location.reload()">
+          Yritä uudelleen
+        </button>
+        <a class="secondary" href="/">Palaa etusivulle</a>
+      </div>
+    </main>
+  </body>
+</html>
