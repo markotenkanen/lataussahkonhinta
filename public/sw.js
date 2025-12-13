@@ -1,9 +1,8 @@
 // Service Worker for PWA
-const CACHE_NAME = "porssisahko-v8"
-const urlsToCache = ["/", "/manifest.json", "/icon-192.jpg", "/icon-512.jpg"]
+const CACHE_NAME = "porssisahko-v9"
+const urlsToCache = ["/manifest.json", "/icon-192.jpg", "/icon-512.jpg", "/offline.html"]
 const precachePaths = new Set(urlsToCache)
 
-// Install event - cache essential files
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
@@ -13,23 +12,26 @@ self.addEventListener("install", (event) => {
   self.skipWaiting()
 })
 
-// Activate event - clean up old caches
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
+    (async () => {
+      const cacheNames = await caches.keys()
+      await Promise.all(
         cacheNames.map((cacheName) => {
           if (cacheName !== CACHE_NAME) {
             return caches.delete(cacheName)
           }
         }),
       )
-    }),
+
+      if (self.registration.navigationPreload) {
+        await self.registration.navigationPreload.enable()
+      }
+    })(),
   )
   self.clients.claim()
 })
 
-// Fetch event - serve from cache, fallback to network
 self.addEventListener("fetch", (event) => {
   const { request } = event
 
@@ -43,40 +45,65 @@ self.addEventListener("fetch", (event) => {
     return
   }
 
+  if (request.mode === "navigate") {
+    event.respondWith(handleNavigationRequest(event))
+    return
+  }
+
   if (url.pathname.startsWith("/api/")) {
     event.respondWith(fetch(request))
     return
   }
 
-  event.respondWith(
-    (async () => {
-      try {
-        const networkResponse = await fetch(request)
-
-        if (
-          precachePaths.has(url.pathname) ||
-          ["style", "script", "font", "image"].includes(request.destination)
-        ) {
-          const cache = await caches.open(CACHE_NAME)
-          cache.put(request, networkResponse.clone())
-        }
-
-        return networkResponse
-      } catch (error) {
-        const cachedResponse = await caches.match(request)
-        if (cachedResponse) {
-          return cachedResponse
-        }
-
-        if (request.mode === "navigate") {
-          const fallback = await caches.match("/")
-          if (fallback) {
-            return fallback
-          }
-        }
-
-        throw error
-      }
-    })(),
-  )
+  event.respondWith(cacheAssetRequest(request, url))
 })
+
+async function handleNavigationRequest(event) {
+  try {
+    const preloadResponse = await event.preloadResponse
+    if (preloadResponse) {
+      return preloadResponse
+    }
+
+    const networkResponse = await fetch(event.request)
+    return networkResponse
+  } catch (error) {
+    const cache = await caches.open(CACHE_NAME)
+    const offlineFallback = await cache.match("/offline.html")
+    if (offlineFallback) {
+      return offlineFallback
+    }
+
+    throw error
+  }
+}
+
+async function cacheAssetRequest(request, url) {
+  try {
+    const networkResponse = await fetch(request)
+
+    if (
+      precachePaths.has(url.pathname) ||
+      ["style", "script", "font", "image"].includes(request.destination)
+    ) {
+      const cache = await caches.open(CACHE_NAME)
+      cache.put(request, networkResponse.clone())
+    }
+
+    return networkResponse
+  } catch (error) {
+    const cachedResponse = await caches.match(request)
+    if (cachedResponse) {
+      return cachedResponse
+    }
+
+    if (request.mode === "navigate") {
+      const fallback = await caches.match("/offline.html")
+      if (fallback) {
+        return fallback
+      }
+    }
+
+    throw error
+  }
+}
