@@ -38,6 +38,14 @@ export function ChargingRecommendation({
   const requiredEnergyKWh = (batterySize * targetChargePercent) / 100
   const slotHours = resolution === "hourly" ? 1 : 0.25
 
+  const formatHoursAndMinutes = (hours: number) => {
+    const totalMinutes = Math.round(hours * 60)
+    const hrs = Math.floor(totalMinutes / 60)
+    const mins = totalMinutes % 60
+
+    return mins === 0 ? `${hrs}h` : `${hrs}h ${mins}min`
+  }
+
   const { bestWindow, isOptimalTime, avgPrice, savings, chargeCost, windowDay, chargingHours } = useMemo(() => {
     if (data.length === 0) {
       return {
@@ -131,6 +139,8 @@ export function ChargingRecommendation({
     slotHours,
   ])
 
+  const formattedChargingDuration = formatHoursAndMinutes(chargingHours)
+
   if (!bestWindow) {
     return (
       <Card className="p-6">
@@ -167,9 +177,7 @@ export function ChargingRecommendation({
             </div>
             <div>
               <p className="text-sm text-muted-foreground">{t("chargingDuration")}</p>
-              <p className="font-mono text-lg font-semibold">
-                {chargingHours.toFixed(1)} {t("hours")}
-              </p>
+              <p className="font-mono text-lg font-semibold">{formattedChargingDuration}</p>
             </div>
           </div>
 
@@ -232,7 +240,7 @@ export function ChargingRecommendation({
         <ul className="space-y-1 text-sm text-muted-foreground">
           <li>
             • {chargerPower}kW {t("chargerCharges")} ~{requiredEnergyKWh.toFixed(1)}kWh ({targetChargePercent}%) {" "}
-            {t("chargingDuration").toLowerCase()}: {chargingHours.toFixed(1)} {t("hours")}
+            {t("chargingDuration").toLowerCase()}: {formattedChargingDuration}
           </li>
           <li>• {t("scheduleChargingTip")}</li>
         </ul>
