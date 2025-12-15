@@ -18,24 +18,36 @@ export async function GET(request: Request) {
 
     // 1) Fetch hourly EUR/MWh prices for selected area from Sourceful (ENTSO-E aggregated)
     const srcUrl = `https://mainnet.srcful.dev/price/electricity/${encodeURIComponent(areaInfo.code)}`
-    const resp = await fetch(srcUrl, { cache: "no-store" })
+
+    // 2) Fetch same-day EUR→{SEK,NOK} FX rates in parallel so Nordic prices convert to local currency
+    const fxUrl = "https://api.exchangerate.host/latest?base=EUR&symbols=SEK,NOK"
+
+    const [resp, fxResp] = await Promise.all([
+      fetch(srcUrl, { cache: "no-store" }),
+      fetch(fxUrl, { cache: "no-store" }).catch((err) => {
+        console.warn("Failed to fetch FX rates, using fallback", err)
+        return null
+      }),
+    ])
+
     if (!resp.ok) {
       throw new Error(`Failed to fetch prices for area ${areaInfo.code}`)
     }
+
     const payload = await resp.json()
     const items: any[] = Array.isArray(payload?.prices) ? payload.prices : []
 
-    // 2) Fetch FX rates EUR->{SEK,NOK} when needed
     let eurToSek = 11.0
     let eurToNok = 11.0
-    try {
-      const fxResp = await fetch("https://api.exchangerate.host/latest?base=EUR&symbols=SEK,NOK", { cache: "no-store" })
-      if (fxResp.ok) {
+    if (fxResp && fxResp.ok) {
+      try {
         const fx = await fxResp.json()
         eurToSek = fx?.rates?.SEK ?? eurToSek
         eurToNok = fx?.rates?.NOK ?? eurToNok
+      } catch (err) {
+        console.warn("Failed to parse FX response, using fallback", err)
       }
-    } catch {}
+    }
 
     const minorPerEur: Record<string, number> = {
       EUR: 100, // cents
@@ -49,7 +61,7 @@ export async function GET(request: Request) {
       .filter((it) => typeof it?.datetime === "string" && typeof it?.price === "number")
       .map((it) => {
         const eurPerMwh = it.price as number
-        const localMinorPerEur = minorPerEur[areaInfo.currency]
+        const localMinorPerEur = minorPerEur[areaInfo.currency] ?? minorPerEur.EUR
         const value = (eurPerMwh * localMinorPerEur) / 1000
         return {
           timestamp: it.datetime, // UTC ISO from provider
