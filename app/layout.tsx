@@ -1,7 +1,5 @@
 import type React from "react"
-import type { Metadata } from "next"
-import { GeistMono } from "geist/font/mono"
-import { GeistSans } from "geist/font/sans"
+import type { Metadata, Viewport } from "next"
 import "./globals.css"
 import { Suspense } from "react"
 
@@ -33,11 +31,12 @@ export const metadata: Metadata = {
   formatDetection: {
     telephone: false,
   },
+}
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
   themeColor: "#3b82f6",
-  viewport: {
-    width: "device-width",
-    initialScale: 1,
-  },
 }
 
 export default function RootLayout({
@@ -81,7 +80,7 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className={`font-sans ${geistSans.variable} ${geistMono.variable}`}>
+      <body className="font-sans">
         <Suspense fallback={null}>{children}</Suspense>
       </body>
     </html>
