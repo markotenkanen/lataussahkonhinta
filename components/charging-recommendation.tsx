@@ -2,7 +2,7 @@
 
 import { useMemo } from "react"
 import { Card } from "@/components/ui/card"
-import { Battery, Clock, Euro, Zap, TrendingDown } from "lucide-react"
+import { Battery, Clock, Euro, Timer, Zap, TrendingDown } from "lucide-react"
 import type { PriceData, Resolution } from "./electricity-dashboard"
 import { formatTimeInTimezone, isSameDayInTimezone } from "@/lib/date-utils"
 import { useTranslation } from "@/lib/translations"
@@ -13,8 +13,10 @@ interface ChargingRecommendationProps {
   resolution: Resolution
   chargerPower: number
   batterySize: number
+  targetChargePercent: number
   timezone: string
-  currencySymbol: string
+  currencyCode: string
+  unitLabel: string
 }
 
 export function ChargingRecommendation({
@@ -23,13 +25,26 @@ export function ChargingRecommendation({
   resolution,
   chargerPower,
   batterySize,
+  targetChargePercent,
   timezone,
-  currencySymbol,
+  currencyCode,
+  unitLabel,
 }: ChargingRecommendationProps) {
   const { t, language } = useTranslation()
 
   console.log("[v0] ChargingRecommendation - Current language:", language)
   console.log("[v0] ChargingRecommendation - Translated 'chargingRecommendation':", t("chargingRecommendation"))
+
+  const requiredEnergyKWh = (batterySize * targetChargePercent) / 100
+  const slotHours = resolution === "hourly" ? 1 : 0.25
+
+  const formatHoursAndMinutes = (hours: number) => {
+    const totalMinutes = Math.round(hours * 60)
+    const hrs = Math.floor(totalMinutes / 60)
+    const mins = totalMinutes % 60
+
+    return mins === 0 ? `${hrs}h` : `${hrs}h ${mins}min`
+  }
 
   const { bestWindow, isOptimalTime, avgPrice, savings, chargeCost, windowDay, chargingHours } = useMemo(() => {
     if (data.length === 0) {
@@ -44,7 +59,21 @@ export function ChargingRecommendation({
       }
     }
 
-    const windowSize = resolution === "hourly" ? 4 : 16
+    const requiredHours = requiredEnergyKWh / Math.max(chargerPower, 0.1)
+    const windowSize = Math.max(1, Math.ceil(requiredHours / slotHours))
+
+    if (data.length < windowSize) {
+      return {
+        bestWindow: null,
+        isOptimalTime: false,
+        avgPrice: 0,
+        savings: 0,
+        chargeCost: 0,
+        windowDay: "",
+        chargingHours: requiredHours,
+      }
+    }
+
     let bestWindowData = { startIndex: 0, avgPrice: Number.POSITIVE_INFINITY }
 
     for (let i = 0; i <= data.length - windowSize; i++) {
@@ -59,7 +88,7 @@ export function ChargingRecommendation({
       start: data[bestWindowData.startIndex],
       end: data[bestWindowData.startIndex + windowSize - 1],
       avgPrice: bestWindowData.avgPrice,
-      hours: 4,
+      hours: windowSize * slotHours,
     }
 
     const currentTimestamp = currentTime.getTime()
@@ -72,9 +101,9 @@ export function ChargingRecommendation({
 
     const savingsPercent = ((dayAvgPrice - window.avgPrice) / dayAvgPrice) * 100
 
-    const cost = (window.avgPrice * batterySize) / 100
+    const cost = (window.avgPrice * requiredEnergyKWh) / 100
 
-    const hours = batterySize / chargerPower
+    const hours = requiredHours
 
     const windowStartDate = new Date(window.start.timestamp)
     const isToday = isSameDayInTimezone(windowStartDate, currentTime, timezone)
@@ -98,13 +127,25 @@ export function ChargingRecommendation({
       windowDay: day,
       chargingHours: hours,
     }
-  }, [data, currentTime, resolution, chargerPower, batterySize, language, timezone])
+  }, [
+    data,
+    currentTime,
+    resolution,
+    chargerPower,
+    batterySize,
+    language,
+    timezone,
+    requiredEnergyKWh,
+    slotHours,
+  ])
+
+  const formattedChargingDuration = formatHoursAndMinutes(chargingHours)
 
   if (!bestWindow) {
     return (
       <Card className="p-6">
         <div className="text-center text-muted-foreground">
-          <p>{t("loadingFailed")}</p>
+          <p>{t("noUpcomingPrices")}</p>
         </div>
       </Card>
     )
@@ -112,8 +153,13 @@ export function ChargingRecommendation({
 
   return (
     <Card className="p-6">
-      <div className="mb-6 flex items-center justify-between">
-        <h2 className="text-xl font-semibold">{t("chargingRecommendation")}</h2>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <h2 className="text-xl font-semibold">{t("chargingRecommendation")}</h2>
+          <span className="rounded-full bg-muted px-3 py-1 text-xs font-medium text-muted-foreground">
+            {t("chargePortion")}: {targetChargePercent}% (~{requiredEnergyKWh.toFixed(1)} kWh)
+          </span>
+        </div>
         {isOptimalTime && (
           <span className="flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-sm font-medium text-primary">
             <Zap className="h-4 w-4" />
@@ -125,6 +171,16 @@ export function ChargingRecommendation({
       <div className="grid gap-6 md:grid-cols-2">
         {/* Best Charging Window */}
         <div className="space-y-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-muted/50">
+              <Timer className="h-6 w-6 text-muted-foreground" />
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">{t("chargingDuration")}</p>
+              <p className="font-mono text-lg font-semibold">{formattedChargingDuration}</p>
+            </div>
+          </div>
+
           <div className="flex items-center gap-3">
             <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
               <Clock className="h-6 w-6 text-primary" />
@@ -145,7 +201,7 @@ export function ChargingRecommendation({
             </div>
             <div>
               <p className="text-sm text-muted-foreground">{t("averageToday")}</p>
-              <p className="font-mono text-lg font-semibold">{bestWindow.avgPrice.toFixed(2)} c/kWh</p>
+              <p className="font-mono text-lg font-semibold">{bestWindow.avgPrice.toFixed(2)} {unitLabel}</p>
             </div>
           </div>
         </div>
@@ -170,9 +226,9 @@ export function ChargingRecommendation({
             </div>
             <div>
               <p className="text-sm text-muted-foreground">
-                {t("estimatedCost")} ({batterySize}kWh)
+                {t("estimatedCost")} ({requiredEnergyKWh.toFixed(1)}kWh)
               </p>
-              <p className="font-mono text-lg font-semibold">{currencySymbol}{chargeCost.toFixed(2)}</p>
+              <p className="font-mono text-lg font-semibold">{currencyCode} {chargeCost.toFixed(2)}</p>
             </div>
           </div>
         </div>
@@ -183,8 +239,8 @@ export function ChargingRecommendation({
         <h3 className="mb-2 font-semibold">💡 {t("smartChargingTips")}</h3>
         <ul className="space-y-1 text-sm text-muted-foreground">
           <li>
-            • {chargerPower}kW {t("chargerCharges")} {batterySize}kWh {t("batteryFromEmptyToFull")} {" "}
-            {chargingHours.toFixed(1)} {t("hours")}
+            • {chargerPower}kW {t("chargerCharges")} ~{requiredEnergyKWh.toFixed(1)}kWh ({targetChargePercent}%) {" "}
+            {t("chargingDuration").toLowerCase()}: {formattedChargingDuration}
           </li>
           <li>• {t("scheduleChargingTip")}</li>
         </ul>
