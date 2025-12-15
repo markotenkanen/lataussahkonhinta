@@ -116,6 +116,20 @@
 }
 
 @layer base {
+  :host,
+  html {
+    text-size-adjust: 100%;
+    letter-spacing: normal;
+    font-size: 100%;
+  }
+
+  @supports (-webkit-touch-callout: none) {
+    :host,
+    html {
+      -webkit-text-size-adjust: 100%;
+    }
+  }
+
   * {
     @apply border-border outline-ring/50;
   }
