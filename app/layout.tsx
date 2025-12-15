@@ -2,6 +2,7 @@ import type React from "react"
 import type { Metadata, Viewport } from "next"
 import "./globals.css"
 import { Suspense } from "react"
+import { GeistSans } from "geist/font/sans"
 
 const geistSans = GeistSans({
   subsets: ["latin"],
@@ -80,7 +81,7 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className="font-sans">
+      <body className={`${GeistSans.className} font-sans`}>
         <Suspense fallback={null}>{children}</Suspense>
       </body>
     </html>
