@@ -3,6 +3,20 @@ import type { Metadata } from "next"
 import "./globals.css"
 import { Suspense } from "react"
 
+const geistSans = GeistSans({
+  subsets: ["latin"],
+  variable: "--font-geist-sans",
+  display: "swap",
+  preload: false,
+})
+
+const geistMono = GeistMono({
+  subsets: ["latin"],
+  variable: "--font-geist-mono",
+  display: "swap",
+  preload: false,
+})
+
 export const metadata: Metadata = {
   title: "Suomi, Ruotsi, Norja pörssisähkön hintaseuranta",
   description:
