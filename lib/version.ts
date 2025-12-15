@@ -1,3 +1,3 @@
 // App version - increment this when deploying updates
-export const APP_VERSION = "v2.27"
+export const APP_VERSION = "v2.29"
 export const VERSION_KEY = "app_version"
