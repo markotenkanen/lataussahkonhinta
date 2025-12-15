@@ -1,7 +1,5 @@
 import type React from "react"
 import type { Metadata } from "next"
-import { GeistMono } from "geist/font/mono"
-import { GeistSans } from "geist/font/sans"
 import "./globals.css"
 import { Suspense } from "react"
 
@@ -81,7 +79,7 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className={`font-sans ${geistSans.variable} ${geistMono.variable}`}>
+      <body className="font-sans">
         <Suspense fallback={null}>{children}</Suspense>
       </body>
     </html>
