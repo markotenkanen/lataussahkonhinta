@@ -75,8 +75,10 @@
 }
 
 @theme inline {
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, SFMono-Regular, Menlo, Monaco,
+    Consolas, "Liberation Mono", "Courier New", monospace;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -116,6 +118,20 @@
 }
 
 @layer base {
+  :host,
+  html {
+    text-size-adjust: 100%;
+    letter-spacing: normal;
+    font-size: 100%;
+  }
+
+  @supports (-webkit-touch-callout: none) {
+    :host,
+    html {
+      -webkit-text-size-adjust: 100%;
+    }
+  }
+
   * {
     @apply border-border outline-ring/50;
   }
