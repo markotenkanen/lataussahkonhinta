@@ -10,6 +10,12 @@ interface NordpoolPrice {
   price: number
 }
 
+interface RawPriceItem {
+  datetime?: string
+  start_time?: string
+  price?: number
+}
+
 async function fetchWithRetry(url: string, retries = 1): Promise<Response> {
   let lastError: unknown = null
 
@@ -35,28 +41,48 @@ async function fetchWithRetry(url: string, retries = 1): Promise<Response> {
   throw lastError instanceof Error ? lastError : new Error("Request failed")
 }
 
+async function fetchPrices(areaCode: string): Promise<RawPriceItem[]> {
+  const endpoints = [
+    `https://mainnet.srcful.dev/price/electricity/${encodeURIComponent(areaCode)}`,
+    `https://mainnet.srcful.dev/price/prices/${encodeURIComponent(areaCode)}?format=json`,
+  ]
+
+  let lastError: unknown = null
+
+  for (const endpoint of endpoints) {
+    try {
+      const resp = await fetchWithRetry(endpoint, 1)
+      const payload = await resp.json()
+      const prices = Array.isArray(payload?.prices) ? payload.prices : []
+
+      if (prices.length > 0) {
+        return prices as RawPriceItem[]
+      }
+    } catch (error) {
+      lastError = error
+      console.warn("Price endpoint failed, trying fallback endpoint", { endpoint, error })
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error("No price endpoints available")
+}
+
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
     const areaParam = (searchParams.get("area") || DEFAULT_AREA).toUpperCase()
     const areaInfo = AREAS[areaParam as keyof typeof AREAS] || AREAS[DEFAULT_AREA]
 
-    // 1) Fetch hourly EUR/MWh prices for selected area from Sourceful (ENTSO-E aggregated)
-    const srcUrl = `https://mainnet.srcful.dev/price/electricity/${encodeURIComponent(areaInfo.code)}`
-
     // 2) Fetch same-day EUR→{SEK,NOK} FX rates in parallel so Nordic prices convert to local currency
     const fxUrl = "https://api.exchangerate.host/latest?base=EUR&symbols=SEK,NOK"
 
-    const [resp, fxResp] = await Promise.all([
-      fetchWithRetry(srcUrl, 1),
+    const [items, fxResp] = await Promise.all([
+      fetchPrices(areaInfo.code),
       fetch(fxUrl, { cache: "no-store" }).catch((err) => {
         console.warn("Failed to fetch FX rates, using fallback", err)
         return null
       }),
     ])
-
-    const payload = await resp.json()
-    const items: any[] = Array.isArray(payload?.prices) ? payload.prices : []
 
     let eurToSek = 11.0
     let eurToNok = 11.0
@@ -79,13 +105,17 @@ export async function GET(request: Request) {
     // 3) Convert EUR/MWh -> local minor unit per kWh
     // formula: (EUR_per_MWh * local_minor_per_EUR) / 1000
     const out: NordpoolPrice[] = items
-      .filter((it) => typeof it?.datetime === "string" && typeof it?.price === "number")
+      .filter(
+        (it) =>
+          (typeof it?.datetime === "string" || typeof it?.start_time === "string") &&
+          typeof it?.price === "number",
+      )
       .map((it) => {
         const eurPerMwh = it.price as number
         const localMinorPerEur = minorPerEur[areaInfo.currency] ?? minorPerEur.EUR
         const value = (eurPerMwh * localMinorPerEur) / 1000
         return {
-          timestamp: it.datetime, // UTC ISO from provider
+          timestamp: (it.datetime || it.start_time) as string, // UTC ISO from provider
           price: value, // minor unit per kWh (c/øre per kWh)
         }
       })
