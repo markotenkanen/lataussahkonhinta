@@ -1,4 +1,4 @@
-export const runtime = "edge"
+export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 export const revalidate = 0
 
@@ -8,6 +8,31 @@ import { AREAS, DEFAULT_AREA } from "@/lib/areas"
 interface NordpoolPrice {
   timestamp: string
   price: number
+}
+
+async function fetchWithRetry(url: string, retries = 1): Promise<Response> {
+  let lastError: unknown = null
+
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    try {
+      const response = await fetch(url, {
+        cache: "no-store",
+        headers: {
+          Accept: "application/json",
+        },
+      })
+
+      if (response.ok) {
+        return response
+      }
+
+      lastError = new Error(`Request failed with status ${response.status}`)
+    } catch (error) {
+      lastError = error
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error("Request failed")
 }
 
 export async function GET(request: Request) {
@@ -23,16 +48,12 @@ export async function GET(request: Request) {
     const fxUrl = "https://api.exchangerate.host/latest?base=EUR&symbols=SEK,NOK"
 
     const [resp, fxResp] = await Promise.all([
-      fetch(srcUrl, { cache: "no-store" }),
+      fetchWithRetry(srcUrl, 1),
       fetch(fxUrl, { cache: "no-store" }).catch((err) => {
         console.warn("Failed to fetch FX rates, using fallback", err)
         return null
       }),
     ])
-
-    if (!resp.ok) {
-      throw new Error(`Failed to fetch prices for area ${areaInfo.code}`)
-    }
 
     const payload = await resp.json()
     const items: any[] = Array.isArray(payload?.prices) ? payload.prices : []
