@@ -1,4 +1,4 @@
-export const runtime = "edge"
+export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 export const revalidate = 0
 
@@ -10,32 +10,91 @@ interface NordpoolPrice {
   price: number
 }
 
+interface RawPriceItem {
+  datetime?: string
+  start_time?: string
+  price?: number
+}
+
+async function fetchWithRetry(url: string, retries = 1): Promise<Response> {
+  let lastError: unknown = null
+
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    try {
+      const response = await fetch(url, {
+        cache: "no-store",
+        headers: {
+          Accept: "application/json",
+        },
+      })
+
+      if (response.ok) {
+        return response
+      }
+
+      lastError = new Error(`Request failed with status ${response.status}`)
+    } catch (error) {
+      lastError = error
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error("Request failed")
+}
+
+async function fetchPrices(areaCode: string): Promise<RawPriceItem[]> {
+  const endpoints = [
+    `https://mainnet.srcful.dev/price/electricity/${encodeURIComponent(areaCode)}`,
+    `https://mainnet.srcful.dev/price/prices/${encodeURIComponent(areaCode)}?format=json`,
+  ]
+
+  let lastError: unknown = null
+
+  for (const endpoint of endpoints) {
+    try {
+      const resp = await fetchWithRetry(endpoint, 1)
+      const payload = await resp.json()
+      const prices = Array.isArray(payload?.prices) ? payload.prices : []
+
+      if (prices.length > 0) {
+        return prices as RawPriceItem[]
+      }
+    } catch (error) {
+      lastError = error
+      console.warn("Price endpoint failed, trying fallback endpoint", { endpoint, error })
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error("No price endpoints available")
+}
+
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
     const areaParam = (searchParams.get("area") || DEFAULT_AREA).toUpperCase()
     const areaInfo = AREAS[areaParam as keyof typeof AREAS] || AREAS[DEFAULT_AREA]
 
-    // 1) Fetch hourly EUR/MWh prices for selected area from Sourceful (ENTSO-E aggregated)
-    const srcUrl = `https://mainnet.srcful.dev/price/electricity/${encodeURIComponent(areaInfo.code)}`
-    const resp = await fetch(srcUrl, { cache: "no-store" })
-    if (!resp.ok) {
-      throw new Error(`Failed to fetch prices for area ${areaInfo.code}`)
-    }
-    const payload = await resp.json()
-    const items: any[] = Array.isArray(payload?.prices) ? payload.prices : []
+    // 2) Fetch same-day EUR→{SEK,NOK} FX rates in parallel so Nordic prices convert to local currency
+    const fxUrl = "https://api.exchangerate.host/latest?base=EUR&symbols=SEK,NOK"
 
-    // 2) Fetch FX rates EUR->{SEK,NOK} when needed
+    const [items, fxResp] = await Promise.all([
+      fetchPrices(areaInfo.code),
+      fetch(fxUrl, { cache: "no-store" }).catch((err) => {
+        console.warn("Failed to fetch FX rates, using fallback", err)
+        return null
+      }),
+    ])
+
     let eurToSek = 11.0
     let eurToNok = 11.0
-    try {
-      const fxResp = await fetch("https://api.exchangerate.host/latest?base=EUR&symbols=SEK,NOK", { cache: "no-store" })
-      if (fxResp.ok) {
+    if (fxResp && fxResp.ok) {
+      try {
         const fx = await fxResp.json()
         eurToSek = fx?.rates?.SEK ?? eurToSek
         eurToNok = fx?.rates?.NOK ?? eurToNok
+      } catch (err) {
+        console.warn("Failed to parse FX response, using fallback", err)
       }
-    } catch {}
+    }
 
     const minorPerEur: Record<string, number> = {
       EUR: 100, // cents
@@ -46,13 +105,17 @@ export async function GET(request: Request) {
     // 3) Convert EUR/MWh -> local minor unit per kWh
     // formula: (EUR_per_MWh * local_minor_per_EUR) / 1000
     const out: NordpoolPrice[] = items
-      .filter((it) => typeof it?.datetime === "string" && typeof it?.price === "number")
+      .filter(
+        (it) =>
+          (typeof it?.datetime === "string" || typeof it?.start_time === "string") &&
+          typeof it?.price === "number",
+      )
       .map((it) => {
         const eurPerMwh = it.price as number
-        const localMinorPerEur = minorPerEur[areaInfo.currency]
+        const localMinorPerEur = minorPerEur[areaInfo.currency] ?? minorPerEur.EUR
         const value = (eurPerMwh * localMinorPerEur) / 1000
         return {
-          timestamp: it.datetime, // UTC ISO from provider
+          timestamp: (it.datetime || it.start_time) as string, // UTC ISO from provider
           price: value, // minor unit per kWh (c/øre per kWh)
         }
       })
