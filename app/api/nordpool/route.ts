@@ -16,6 +16,15 @@ interface RawPriceItem {
   price?: number
 }
 
+interface FiFallbackPriceItem {
+  price?: number
+  value?: number
+  startDate?: string
+  start_date?: string
+  datetime?: string
+  time?: string
+}
+
 async function fetchWithRetry(url: string, retries = 1): Promise<Response> {
   let lastError: unknown = null
 
@@ -67,12 +76,34 @@ async function fetchPrices(areaCode: string): Promise<RawPriceItem[]> {
   throw lastError instanceof Error ? lastError : new Error("No price endpoints available")
 }
 
-export async function GET(request: Request) {
-  try {
-    const { searchParams } = new URL(request.url)
-    const areaParam = (searchParams.get("area") || DEFAULT_AREA).toUpperCase()
-    const areaInfo = AREAS[areaParam as keyof typeof AREAS] || AREAS[DEFAULT_AREA]
+async function fetchFiFallbackPrices(): Promise<NordpoolPrice[]> {
+  const resp = await fetchWithRetry("https://api.porssisahko.net/v1/latest-prices.json", 1)
+  const payload = await resp.json()
+  const items: FiFallbackPriceItem[] = Array.isArray(payload)
+    ? payload
+    : Array.isArray(payload?.prices)
+      ? payload.prices
+      : []
 
+  return items
+    .map((item) => {
+      const timestamp = item.startDate || item.start_date || item.datetime || item.time
+      const price = item.price ?? item.value
+      return {
+        timestamp: typeof timestamp === "string" ? timestamp : "",
+        price: typeof price === "number" ? price : Number.NaN,
+      }
+    })
+    .filter((item) => item.timestamp && Number.isFinite(item.price))
+    .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+}
+
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url)
+  const areaParam = (searchParams.get("area") || DEFAULT_AREA).toUpperCase()
+  const areaInfo = AREAS[areaParam as keyof typeof AREAS] || AREAS[DEFAULT_AREA]
+
+  try {
     // 2) Fetch same-day EUR→{SEK,NOK} FX rates in parallel so Nordic prices convert to local currency
     const fxUrl = "https://api.exchangerate.host/latest?base=EUR&symbols=SEK,NOK"
 
@@ -129,6 +160,23 @@ export async function GET(request: Request) {
       },
     })
   } catch (error) {
+    if (areaInfo.code === "FI") {
+      try {
+        const fallbackOut = await fetchFiFallbackPrices()
+        if (fallbackOut.length > 0) {
+          return NextResponse.json(fallbackOut, {
+            headers: {
+              "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0",
+              "CDN-Cache-Control": "no-store",
+              "Vercel-CDN-Cache-Control": "no-store",
+            },
+          })
+        }
+      } catch (fallbackError) {
+        console.error("FI fallback API failed:", fallbackError)
+      }
+    }
+
     console.error("Error fetching Nordpool prices:", error)
     return NextResponse.json(
       { error: "Failed to fetch electricity prices" },
