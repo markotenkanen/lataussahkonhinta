@@ -85,13 +85,17 @@ async function fetchFiFallbackPrices(): Promise<NordpoolPrice[]> {
       ? payload.prices
       : []
 
+  // porssisahko.net prices are c/kWh *including* VAT, but the client adds VAT itself
+  // (and the primary source is VAT-free), so strip VAT here to avoid double taxation.
+  const vatDivisor = 1 + AREAS.FI.vatPercent / 100
+
   return items
     .map((item) => {
       const timestamp = item.startDate || item.start_date || item.datetime || item.time
       const price = item.price ?? item.value
       return {
         timestamp: typeof timestamp === "string" ? timestamp : "",
-        price: typeof price === "number" ? price : Number.NaN,
+        price: typeof price === "number" ? price / vatDivisor : Number.NaN,
       }
     })
     .filter((item) => item.timestamp && Number.isFinite(item.price))
