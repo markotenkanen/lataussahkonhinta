@@ -39,7 +39,7 @@ export interface PriceColorThresholds {
 export type Resolution = "hourly" | "15min"
 
 const CACHE_PREFIX = "nordpool_price_data"
-const CACHE_VERSION = 5
+const CACHE_VERSION = 6
 
 function cacheKeyFor(area: string) {
   return `${CACHE_PREFIX}:${area}`

@@ -3,29 +3,22 @@ export const dynamic = "force-dynamic"
 export const revalidate = 0
 
 import { NextResponse } from "next/server"
-import { AREAS, DEFAULT_AREA } from "@/lib/areas"
+import { AREAS, DEFAULT_AREA, type AreaInfo } from "@/lib/areas"
 
+// All sources return VAT-free prices in the area's minor currency unit per kWh
+// (c/kWh, öre/kWh, øre/kWh). The client adds VAT itself.
 interface NordpoolPrice {
-  timestamp: string
+  timestamp: string // UTC ISO start of the delivery period
   price: number
 }
 
-interface RawPriceItem {
-  datetime?: string
-  start_time?: string
-  price?: number
+const NO_STORE_HEADERS = {
+  "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0",
+  "CDN-Cache-Control": "no-store",
+  "Vercel-CDN-Cache-Control": "no-store",
 }
 
-interface FiFallbackPriceItem {
-  price?: number
-  value?: number
-  startDate?: string
-  start_date?: string
-  datetime?: string
-  time?: string
-}
-
-async function fetchWithRetry(url: string, retries = 1): Promise<Response> {
+async function fetchJsonOrNull(url: string, retries = 1): Promise<unknown | null> {
   let lastError: unknown = null
 
   for (let attempt = 0; attempt <= retries; attempt += 1) {
@@ -37,8 +30,14 @@ async function fetchWithRetry(url: string, retries = 1): Promise<Response> {
         },
       })
 
+      // 204 / 404 = prices for that day are not published yet
+      if (response.status === 204 || response.status === 404) {
+        return null
+      }
+
       if (response.ok) {
-        return response
+        const text = await response.text()
+        return text ? JSON.parse(text) : null
       }
 
       lastError = new Error(`Request failed with status ${response.status}`)
@@ -50,56 +49,113 @@ async function fetchWithRetry(url: string, retries = 1): Promise<Response> {
   throw lastError instanceof Error ? lastError : new Error("Request failed")
 }
 
-async function fetchPrices(areaCode: string): Promise<RawPriceItem[]> {
-  const endpoints = [
-    `https://mainnet.srcful.dev/price/electricity/${encodeURIComponent(areaCode)}`,
-    `https://mainnet.srcful.dev/price/prices/${encodeURIComponent(areaCode)}?format=json`,
-  ]
+// Yesterday, today and tomorrow as YYYY-MM-DD in the given time zone
+function surroundingDates(timeZone: string): string[] {
+  const now = Date.now()
+  return [-1, 0, 1].map((offset) =>
+    new Date(now + offset * 24 * 60 * 60 * 1000).toLocaleDateString("sv-SE", { timeZone }),
+  )
+}
 
-  let lastError: unknown = null
+function normalize(items: NordpoolPrice[]): NordpoolPrice[] {
+  const byTimestamp = new Map<number, NordpoolPrice>()
 
-  for (const endpoint of endpoints) {
-    try {
-      const resp = await fetchWithRetry(endpoint, 1)
-      const payload = await resp.json()
-      const prices = Array.isArray(payload?.prices) ? payload.prices : []
-
-      if (prices.length > 0) {
-        return prices as RawPriceItem[]
-      }
-    } catch (error) {
-      lastError = error
-      console.warn("Price endpoint failed, trying fallback endpoint", { endpoint, error })
+  for (const item of items) {
+    const time = new Date(item.timestamp).getTime()
+    if (Number.isFinite(time) && Number.isFinite(item.price)) {
+      byTimestamp.set(time, { timestamp: new Date(time).toISOString(), price: item.price })
     }
   }
 
-  throw lastError instanceof Error ? lastError : new Error("No price endpoints available")
+  return Array.from(byTimestamp.entries())
+    .sort(([a], [b]) => a - b)
+    .map(([, item]) => item)
 }
 
-async function fetchFiFallbackPrices(): Promise<NordpoolPrice[]> {
-  const resp = await fetchWithRetry("https://api.porssisahko.net/v1/latest-prices.json", 1)
-  const payload = await resp.json()
-  const items: FiFallbackPriceItem[] = Array.isArray(payload)
-    ? payload
-    : Array.isArray(payload?.prices)
-      ? payload.prices
-      : []
+async function fetchDays(dates: string[], fetchDay: (date: string) => Promise<NordpoolPrice[]>) {
+  // One failing day (e.g. tomorrow) must not hide the days that did load
+  const days = await Promise.allSettled(dates.map(fetchDay))
+  const prices = normalize(days.flatMap((day) => (day.status === "fulfilled" ? day.value : [])))
 
-  // porssisahko.net prices are c/kWh *including* VAT, but the client adds VAT itself
-  // (and the primary source is VAT-free), so strip VAT here to avoid double taxation.
-  const vatDivisor = 1 + AREAS.FI.vatPercent / 100
+  if (prices.length === 0) {
+    throw new Error("No prices returned")
+  }
 
-  return items
-    .map((item) => {
-      const timestamp = item.startDate || item.start_date || item.datetime || item.time
-      const price = item.price ?? item.value
-      return {
-        timestamp: typeof timestamp === "string" ? timestamp : "",
-        price: typeof price === "number" ? price / vatDivisor : Number.NaN,
-      }
-    })
-    .filter((item) => item.timestamp && Number.isFinite(item.price))
-    .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+  return prices
+}
+
+// Primary source: Nord Pool data portal, 15-minute day-ahead prices in local currency (per MWh)
+async function fetchNordpoolPrices(areaInfo: AreaInfo): Promise<NordpoolPrice[]> {
+  return fetchDays(surroundingDates("Europe/Berlin"), async (date) => {
+    const url =
+      "https://dataportal-api.nordpoolgroup.com/api/DayAheadPrices" +
+      `?date=${date}&market=DayAhead&deliveryArea=${encodeURIComponent(areaInfo.code)}` +
+      `&currency=${areaInfo.currency}`
+    const payload = (await fetchJsonOrNull(url)) as {
+      multiAreaEntries?: { deliveryStart?: string; entryPerArea?: Record<string, number> }[]
+    } | null
+
+    return (payload?.multiAreaEntries ?? []).map((entry) => ({
+      timestamp: entry.deliveryStart ?? "",
+      // per MWh -> minor unit per kWh: * 100 / 1000
+      price: (entry.entryPerArea?.[areaInfo.code] ?? Number.NaN) / 10,
+    }))
+  })
+}
+
+// FI fallback: porssisahko.net v2, 15-minute prices in c/kWh *including* VAT
+async function fetchFiFallbackPrices(areaInfo: AreaInfo): Promise<NordpoolPrice[]> {
+  const payload = (await fetchJsonOrNull("https://api.porssisahko.net/v2/latest-prices.json")) as {
+    prices?: { price?: number; startDate?: string }[]
+  } | null
+  const vatDivisor = 1 + areaInfo.vatPercent / 100
+
+  const prices = normalize(
+    (payload?.prices ?? []).map((item) => ({
+      timestamp: item.startDate ?? "",
+      price: typeof item.price === "number" ? item.price / vatDivisor : Number.NaN,
+    })),
+  )
+
+  if (prices.length === 0) {
+    throw new Error("No prices returned")
+  }
+
+  return prices
+}
+
+// SE fallback: elprisetjustnu.se, 15-minute prices in SEK/kWh excluding VAT
+async function fetchSeFallbackPrices(areaInfo: AreaInfo): Promise<NordpoolPrice[]> {
+  return fetchDays(surroundingDates(areaInfo.timezone), async (date) => {
+    const [year, monthDay] = [date.slice(0, 4), date.slice(5)]
+    const url = `https://www.elprisetjustnu.se/api/v1/prices/${year}/${monthDay}_${areaInfo.code}.json`
+    const payload = (await fetchJsonOrNull(url)) as { SEK_per_kWh?: number; time_start?: string }[] | null
+
+    return (Array.isArray(payload) ? payload : []).map((item) => ({
+      timestamp: item.time_start ?? "",
+      price: typeof item.SEK_per_kWh === "number" ? item.SEK_per_kWh * 100 : Number.NaN,
+    }))
+  })
+}
+
+// NO fallback: hvakosterstrommen.no, hourly prices in NOK/kWh excluding VAT
+async function fetchNoFallbackPrices(areaInfo: AreaInfo): Promise<NordpoolPrice[]> {
+  return fetchDays(surroundingDates(areaInfo.timezone), async (date) => {
+    const [year, monthDay] = [date.slice(0, 4), date.slice(5)]
+    const url = `https://www.hvakosterstrommen.no/api/v1/prices/${year}/${monthDay}_${areaInfo.code}.json`
+    const payload = (await fetchJsonOrNull(url)) as { NOK_per_kWh?: number; time_start?: string }[] | null
+
+    return (Array.isArray(payload) ? payload : []).map((item) => ({
+      timestamp: item.time_start ?? "",
+      price: typeof item.NOK_per_kWh === "number" ? item.NOK_per_kWh * 100 : Number.NaN,
+    }))
+  })
+}
+
+const FALLBACKS: Record<AreaInfo["country"], (areaInfo: AreaInfo) => Promise<NordpoolPrice[]>> = {
+  FI: fetchFiFallbackPrices,
+  SE: fetchSeFallbackPrices,
+  NO: fetchNoFallbackPrices,
 }
 
 export async function GET(request: Request) {
@@ -107,89 +163,25 @@ export async function GET(request: Request) {
   const areaParam = (searchParams.get("area") || DEFAULT_AREA).toUpperCase()
   const areaInfo = AREAS[areaParam as keyof typeof AREAS] || AREAS[DEFAULT_AREA]
 
-  try {
-    // 2) Fetch same-day EUR→{SEK,NOK} FX rates in parallel so Nordic prices convert to local currency
-    const fxUrl = "https://api.exchangerate.host/latest?base=EUR&symbols=SEK,NOK"
+  const sources = [fetchNordpoolPrices, FALLBACKS[areaInfo.country]]
 
-    const [items, fxResp] = await Promise.all([
-      fetchPrices(areaInfo.code),
-      fetch(fxUrl, { cache: "no-store" }).catch((err) => {
-        console.warn("Failed to fetch FX rates, using fallback", err)
-        return null
-      }),
-    ])
-
-    let eurToSek = 11.0
-    let eurToNok = 11.0
-    if (fxResp && fxResp.ok) {
-      try {
-        const fx = await fxResp.json()
-        eurToSek = fx?.rates?.SEK ?? eurToSek
-        eurToNok = fx?.rates?.NOK ?? eurToNok
-      } catch (err) {
-        console.warn("Failed to parse FX response, using fallback", err)
-      }
+  for (const source of sources) {
+    try {
+      const prices = await source(areaInfo)
+      return NextResponse.json(prices, { headers: NO_STORE_HEADERS })
+    } catch (error) {
+      console.warn("Price source failed, trying next source", { source: source.name, area: areaInfo.code, error })
     }
+  }
 
-    const minorPerEur: Record<string, number> = {
-      EUR: 100, // cents
-      SEK: eurToSek * 100, // öre
-      NOK: eurToNok * 100, // øre
-    }
-
-    // 3) Convert EUR/MWh -> local minor unit per kWh
-    // formula: (EUR_per_MWh * local_minor_per_EUR) / 1000
-    const out: NordpoolPrice[] = items
-      .filter(
-        (it) =>
-          (typeof it?.datetime === "string" || typeof it?.start_time === "string") &&
-          typeof it?.price === "number",
-      )
-      .map((it) => {
-        const eurPerMwh = it.price as number
-        const localMinorPerEur = minorPerEur[areaInfo.currency] ?? minorPerEur.EUR
-        const value = (eurPerMwh * localMinorPerEur) / 1000
-        return {
-          timestamp: (it.datetime || it.start_time) as string, // UTC ISO from provider
-          price: value, // minor unit per kWh (c/øre per kWh)
-        }
-      })
-      .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
-
-    return NextResponse.json(out, {
+  console.error("All price sources failed for area", areaInfo.code)
+  return NextResponse.json(
+    { error: "Failed to fetch electricity prices" },
+    {
+      status: 500,
       headers: {
         "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0",
-        "CDN-Cache-Control": "no-store",
-        "Vercel-CDN-Cache-Control": "no-store",
       },
-    })
-  } catch (error) {
-    if (areaInfo.code === "FI") {
-      try {
-        const fallbackOut = await fetchFiFallbackPrices()
-        if (fallbackOut.length > 0) {
-          return NextResponse.json(fallbackOut, {
-            headers: {
-              "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0",
-              "CDN-Cache-Control": "no-store",
-              "Vercel-CDN-Cache-Control": "no-store",
-            },
-          })
-        }
-      } catch (fallbackError) {
-        console.error("FI fallback API failed:", fallbackError)
-      }
-    }
-
-    console.error("Error fetching Nordpool prices:", error)
-    return NextResponse.json(
-      { error: "Failed to fetch electricity prices" },
-      {
-        status: 500,
-        headers: {
-          "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0",
-        },
-      },
-    )
-  }
+    },
+  )
 }
